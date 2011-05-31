@@ -1,0 +1,10 @@
+=================
+mdvpkg TODO List
+=================
+
+* Decide if cached methods should emit signals or return data.
+
+* Add support for better cache updates, implementing verification of
+  changes in entries by package versions.
+
+* Fix documentation to adhere to sphynx
