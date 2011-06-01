@@ -29,6 +29,9 @@ import signal
 import collections
 import logging
 
+import mdvpkg.tasks
+
+
 log = logging.getLogger('mdvpkgd.worker')
 
 
@@ -125,25 +128,53 @@ class Backend(object):
             self.error = 'Unknown response from backend: %s' % tag
 
 
-# class TaskQueue(object):
-#     """Queue for ordering mdvpkg task running."""
-#
-#     def __init__(self, urpmi, backend):
-#         self._urpmi = urpmi
-#         self._backend = backend
-#         self.queue = collections.OrderedDict()
-#
-#     def push(self, task):
-#         if not self.queue:
-#             gobject.idle_add(self.run_next)
-#         self.queue[task.path] = task
-#
-#     def run_next(self):
-#         try:
-#             path, task = self.queue.popitem(last=False)
-#         except KeyError:
-#             # This will happend if the last task has been cancelled
-#             # before run_next() was called ...
-#             pass
-#         else:
-#             self.task.run()
+class Runner(object):
+    """Queue and controls the `run()` co-routine method of mdvpkg
+    tasks."""
+
+    def __init__(self, urpmi, backend_path):
+        self._urpmi = urpmi
+        self._backend = Backend(backend_path)
+        self.queue = collections.OrderedDict()
+        self.task = None
+
+    def push(self, task):
+        log.debug('task queued: %s', task.path)
+        if not self.queue:
+            self.run_next_task()
+        self.queue[task.path] = task
+        task.state = mdvpkg.tasks.STATE_QUEUED
+
+    def remove(self, task):
+        self.queue.pop(task.path)
+
+    def run_next_task(self):
+        self.task = None
+        gobject.idle_add(self._run_next_task)
+
+    def _run_next_task(self):
+        try:
+            _, self.task = self.queue.popitem(last=False)
+        except KeyError:
+            pass
+        else:
+            self.next_task_step(self.task.run(self._urpmi))
+
+    def next_task_step(self, task_gen):
+        try:
+            if self.task.state == mdvpkg.tasks.STATE_CANCELLING:
+                # signal the task's run method that cancelling was
+                # requested:
+                task_gen.close()
+                self.task.on_cancel()
+            else:
+                task_gen.next()
+                gobject.idle_add(self.next_task_step, task_gen)
+        except StopIteration:
+            self.task.state = mdvpkg.tasks.STATE_READY
+            self.task.on_ready()
+            self.run_next_task()
+        except Exception as e:
+            self.task.on_exception(e.message)
+            self.run_next_task()
+

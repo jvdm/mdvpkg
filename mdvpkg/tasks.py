@@ -46,8 +46,14 @@ ERROR_TASK_EXCEPTION = 'error-task-exception'
 ## Task state
 # The task is being setup
 STATE_SETTING_UP = 'state-setting-up'
+# The task has been queued for running
+STATE_QUEUED = 'state-queued'
 # The task runner has finished
 STATE_READY = 'state-ready'
+# The task has been requested to be cancelled
+STATE_CANCELLING = 'state-cancelling'
+# The task is listing requested data
+STATE_LISTING = 'state-listing'
 # The task is Searching packages
 STATE_SEARCHING = 'state-searching'
 # Task is resolving dependencies of packages
@@ -63,7 +69,7 @@ log = logging.getLogger('mdvpkgd.task')
 class TaskBase(dbus.service.Object):
     """Base class for all tasks."""
 
-    def __init__(self, daemon, sender):
+    def __init__(self, daemon, sender, runner):
         self._bus = daemon.bus
         self.path = '%s/%s' % (mdvpkg.DBUS_TASK_PATH, uuid.uuid4().get_hex())
         dbus.service.Object.__init__(
@@ -71,11 +77,10 @@ class TaskBase(dbus.service.Object):
             dbus.service.BusName(mdvpkg.DBUS_SERVICE, self._bus),
             self.path
             )
-        self.urpmi = daemon.urpmi
-        self.backend = daemon.backend
-        self.cancelled = False
+
         self._sender = sender
-        self._state = STATE_SETTING_UP
+        self._runner = runner
+        self.state = STATE_SETTING_UP
 
         # Passed to backend when call_backend is called ...
         self.backend_args = []
@@ -111,7 +116,7 @@ class TaskBase(dbus.service.Object):
         log.debug('Run(): %s, %s', sender, self.path)
         self._check_same_user(sender)
         self._check_if_has_run()
-        self._run()
+        self._runner.push(self)
 
     @dbus.service.method(mdvpkg.DBUS_TASK_INTERFACE,
                          in_signature='',
@@ -121,7 +126,14 @@ class TaskBase(dbus.service.Object):
         """Cancel and remove the task."""
         log.debug('Cancel(): %s, %s', sender, self.path)
         self._check_same_user(sender)
-        self.cancel()
+        prev_state = self.state
+        self.state = STATE_CANCELLING
+        if prev_state == STATE_QUEUED:
+            self._runner.remove(self)
+        elif prev_state in {STATE_SETTING_UP, STATE_READY}:
+            self.on_cancel()
+        # else the task state will be monitored by the runner and it
+        # will be cancelled by it.
 
     #
     # D-Bus signals
@@ -154,14 +166,6 @@ class TaskBase(dbus.service.Object):
         """Default runner, must be implemented in childs."""
         raise NotImplementedError()
 
-    def cancel(self):
-        # FIXME Use STATE_CANCELLING and notify queue ...
-        self.cancelled = True
-        if self.state == STATE_SETTING_UP \
-                or self.state == STATE_READY:
-            self.Finished(EXIT_CANCELLED)
-            self._remove_and_cleanup()
-        raise Exception, 'Task already running.'
 
     def _run(self):
         """Controls the co-routine running the task."""
@@ -183,9 +187,25 @@ class TaskBase(dbus.service.Object):
                 self._remove_and_cleanup
         gobject.idle_add(step, self.run())
 
-    def _on_ready(self):
+    #
+    # Task runner callbacks ...
+    #
+
+    def on_ready(self):
+        """Task run() has finished succesfully."""
         self.Finished(EXIT_SUCCESS)
         self._remove_and_cleanup()
+
+    def on_cancel(self):
+        """Task was running and it has been cancelled."""
+        self.Finished(EXIT_CANCELLED)
+        self._remove_and_cleanup()
+
+    def on_exception(self, message):
+        """Task run() has thrown an exception."""
+        self.Error(ERROR_TASK_EXCEPTION, message)
+        self.Finished(EXIT_FAILED)
+        self._remove_and_cleanup
 
     def _remove_and_cleanup(self):
         """Remove the task from the bus and clean up."""
@@ -200,8 +220,8 @@ class TaskBase(dbus.service.Object):
         # latter will have connection == None:
         if not connection:
             log.info('task sender disconnected: %s', self.path)
-            # FIXME Tasks running in the backend should be cancelled!
-            self._remove_and_cleanup()
+            # mimic the sender cancelling the task:
+            self.Cancel(self._sender)
 
     def _check_same_user(self, sender):
         """Check if the sender is the task owner created the task."""
@@ -225,8 +245,9 @@ class ListMediasTask(TaskBase):
     def Media(self, media_name, update, ignore):
         log.debug('Media(%s, %s, %s)', media_name, update, ignore)
 
-    def run(self):
-        for media in self.urpmi.list_medias():
+    def run(self, urpmi):
+        self.state = STATE_LISTING
+        for media in urpmi.list_medias():
             self.Media(media.name, media.update, media.ignore)
             yield
 
@@ -239,8 +260,9 @@ class ListGroupsTask(TaskBase):
     def Group(self, group, count):
         log.debug('Group(%s, count)', group, count)
 
-    def run(self):
-        for (group, count) in self.urpmi.list_groups():
+    def run(self, urpmi):
+        self.state = STATE_LISTING
+        for (group, count) in urpmi.list_groups():
             self.Group(group, count)
             yield
 
@@ -248,8 +270,8 @@ class ListGroupsTask(TaskBase):
 class ListPackagesTask(TaskBase):
     """List all available packages."""
 
-    def __init__(self, daemon, sender, attributes):
-        TaskBase.__init__(self, daemon, sender)
+    def __init__(self, daemon, sender, runner, attributes):
+        TaskBase.__init__(self, daemon, sender, runner)
         self.filters = {'name': {'sets': {},
                                  'match_func': self._match_name},
                         'media': {'sets': {},
@@ -379,9 +401,10 @@ class ListPackagesTask(TaskBase):
         self._check_if_has_run()
         self._create_list = True
 
-    def run(self):
+    def run(self, urpmi):
+        self.state = STATE_LISTING
         count = 0
-        for package in self.urpmi.list_packages():
+        for package in urpmi.list_packages():
 
             ## Apply filters ...
             if self._is_filtered(package.name, 'name') \
@@ -465,39 +488,41 @@ class ListPackagesTask(TaskBase):
         return False
 
 
-class SearchFilesTask(TaskBase):
-    """Query for package owning file paths."""
-
-    def __init__(self, daemon, sender, pattern):
-        TaskBase.__init__(self, daemon, sender)
-        self.backend_kwargs['pattern'] = pattern
-
-    @dbus.service.signal(dbus_interface=mdvpkg.DBUS_TASK_INTERFACE,
-                         signature='ssssas')
-    def PackageFiles(self, name, version, release, arch, files):
-        log.debug('PackageFiles(%s, %s)', name, files)
-
-    @dbus.service.method(mdvpkg.DBUS_TASK_INTERFACE,
-                         in_signature='b',
-                         out_signature='',
-                         sender_keyword='sender')
-    def SetRegex(self, regex, sender):
-        self._check_same_user(sender)
-        log.debug('SetRegex()')
-        """Match file names using a regex."""
-        self.args.append('fuzzy')
-
-    def run(self):
-        for r in self._backend_helper(backend, 'search_files'):
-            self.PackageFiles(r['name'], r['version'], r['release'],
-                                  r['arch'], r['files'])
-            yield
+# TODO Fix this. It still using old urpmi backend helper ...
+#
+# class SearchFilesTask(TaskBase):
+#     """Query for package owning file paths."""
+#
+#     def __init__(self, daemon, sender, runner, pattern):
+#         TaskBase.__init__(self, daemon, sender, runner)
+#         self.backend_kwargs['pattern'] = pattern
+#
+#     @dbus.service.signal(dbus_interface=mdvpkg.DBUS_TASK_INTERFACE,
+#                          signature='ssssas')
+#     def PackageFiles(self, name, version, release, arch, files):
+#         log.debug('PackageFiles(%s, %s)', name, files)
+#
+#     @dbus.service.method(mdvpkg.DBUS_TASK_INTERFACE,
+#                          in_signature='b',
+#                          out_signature='',
+#                          sender_keyword='sender')
+#     def SetRegex(self, regex, sender):
+#         self._check_same_user(sender)
+#         log.debug('SetRegex()')
+#         """Match file names using a regex."""
+#         self.args.append('fuzzy')
+#
+#     def run(self):
+#         for r in self._backend_helper(backend, 'search_files'):
+#             self.PackageFiles(r['name'], r['version'], r['release'],
+#                                   r['arch'], r['files'])
+#             yield
 
 class InstallPackagesTask(TaskBase):
     """Install packages or upgrades by name."""
 
-    def __init__(self, daemon, sender, names):
-        TaskBase.__init__(self, daemon, sender)
+    def __init__(self, daemon, sender, runner, names):
+        TaskBase.__init__(self, daemon, sender, runner)
         self.names = names
 
     @dbus.service.signal(dbus_interface=mdvpkg.DBUS_TASK_INTERFACE,
@@ -546,7 +571,8 @@ class InstallPackagesTask(TaskBase):
     def Install(self, name, amount, total):
         log.debug('Install(%s, %s, %s)', name, amount, total)
 
-    def run(self):
+    def run(self, urpmi):
+        self.state = STATE_SEARCHING
         try:
             self.backend.install_packages(self, self.names)
             while not self.backend.task_has_done():

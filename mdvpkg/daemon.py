@@ -35,7 +35,7 @@ import signal
 import mdvpkg
 import mdvpkg.urpmi.db
 import mdvpkg.tasks
-from mdvpkg.worker import Backend
+import mdvpkg.worker
 
 
 log = logging.getLogger('mdvpkgd')
@@ -69,7 +69,7 @@ class MdvPkgDaemon(dbus.service.Object):
             sys.exit(1)
         dbus.service.Object.__init__(self, bus_name, mdvpkg.DBUS_PATH)
         self.urpmi = mdvpkg.urpmi.db.UrpmiDB()
-        self.backend = Backend(backend_path)
+        self.runner = mdvpkg.worker.Runner(self.urpmi, backend_path)
         log.info('Daemon is ready')
 
     def run(self):
@@ -106,15 +106,15 @@ class MdvPkgDaemon(dbus.service.Object):
                                  sender,
                                  attributes)
 
-    @dbus.service.method(mdvpkg.DBUS_INTERFACE,
-                         in_signature='as',
-                         out_signature='o',
-                         sender_keyword='sender')
-    def SearchFiles(self, files, sender):
-        log.info('SearchFiles() called: %s', files)
-        return self._create_task(mdvpkg.tasks.SearchFilesTask,
-                                 sender,
-                                 files)
+    # @dbus.service.method(mdvpkg.DBUS_INTERFACE,
+    #                      in_signature='as',
+    #                      out_signature='o',
+    #                      sender_keyword='sender')
+    # def SearchFiles(self, files, sender):
+    #     log.info('SearchFiles() called: %s', files)
+    #     return self._create_task(mdvpkg.tasks.SearchFilesTask,
+    #                              sender,
+    #                              files)
 
     @dbus.service.method(mdvpkg.DBUS_INTERFACE,
                          in_signature='as',
@@ -137,11 +137,7 @@ class MdvPkgDaemon(dbus.service.Object):
         self._loop.quit()
 
     def _create_task(self, task_class, sender, *args):
-        log.debug('_create_task(): %s, %s, args=%s',
-                  task_class.__name__,
-                  sender,
-                  args)
-        task = task_class(self, sender, *args)
+        task = task_class(self, sender, self.runner, *args)
         return task.path
 
     def _quit_handler(self, signum, frame):
