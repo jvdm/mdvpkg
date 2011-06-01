@@ -4,7 +4,7 @@
 
 mdvpkg is a wrapper upon mandriva urpmi database to provide
 non-privileged users access to package maintenance tasks (upgrade,
-installing, searching). It's development was initiated to support the
+installing, searching). Its development was initiated to support the
 implementation of Mandriva Package Manager.
 
 The following features are aimed:
@@ -166,7 +166,7 @@ after cancellation is a signal of mdvpkg bug.
 Task auto-cancellation
 ----------------------
 
-In two cases the task will be auto-cancelled and removed from the bus
+In two cases the task will be auto-canceled and removed from the bus
 (a) The task is in STATE_SETTING_UP or STATE_READY without any
 configuration method calls for reasonable timeout period, and (b) The
 client has disconnected from the bus.  For (a) the task will signal
@@ -177,7 +177,7 @@ is emitted since the caller has disconnected.
 Task result listing
 -------------------
 
-For some tasks it's possible to supress result signal emission so that
+For some tasks it's possible to suppress result signal emission so that
 later the client can consult the result in a list.  This is called
 task caching, and the client must call `SetCached()` to enable it.
 
