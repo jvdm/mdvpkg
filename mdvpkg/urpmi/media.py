@@ -67,51 +67,41 @@ class UrpmiMedia(gobject.GObject):
                 fields = line.rstrip('\n').split('@')[1:]
                 tag = fields[0]
                 if tag == 'info':
-                    if len(fields) >= 6:
+                    try:
 			pkg['disttag'] = fields[5]
-                    else:
-			pkg['disttag'] = None
-                    if len(fields) >= 7:
 			pkg['distepoch'] = fields[6]
-                    else:
-			pkg['distepoch'] = None
-                    (pkg['name'],
-                     pkg['version'],
-                     pkg['release'],
-                     pkg['arch']) = self.parse_rpm_name(fields[1],
-                                                        pkg['disttag'],
-                                                        pkg['distepoch'])
+                    except IndexError:
+                        pass
+                    pkg.update(zip(('name', 'version', 'release', 'arch'),
+                                   self.parse_rpm_name(
+                                       fields[1],
+                                       pkg.get('disttag', ''),
+                                       pkg.get('distepoch', '')
+                                   )))
                     for (i, field) in enumerate(('epoch', 'size', 'group')):
                         pkg[field] = fields[2 + i]
                     yield pkg
                     pkg = {}
                 elif tag == 'summary':
                     pkg['summary'] = fields[1]
-                elif tag in ('requires', 'provides', 'conflict',
-                                   'obsoletes'):
+                elif tag in ('requires', 'provides', 'conflict', 'obsoletes'):
                     pkg[tag] = self._parse_capability_list(fields[1:])
 
-    def parse_rpm_name(self, name, disttag, distepoch):
+    def parse_rpm_name(self, name, disttag='', distepoch=''):
         """Return (name, version, release, arch) tuple from a rpm
         package name.
 
         Handle both names with and without
         {release}-{disttag}{distepoch}.
         """
-        ## If package has disttag and/or distepoch, we'll remove them
-        ## from the name so that it's parsable ...
-        dist = None
-        if disttag:
-            dist = "-" + disttag
-            if distepoch:
-		dist += distepoch
-            ix = name.rfind(dist + ".")
-            name = name[:ix] + name[ix+len(dist):]
-
+        # If package has disttag and/or distepoch, we'll remove them
+        # from the name so that it's parsable:
+        tagepoch = '%s%s' % (disttag, distepoch)
+        if tagepoch:
+            name = name.replace('-' + tagepoch, '', 1)
         match = self._nvra_re.match(name)
         if not match:
             raise ValueError, 'Malformed RPM name: %s' % name
-
         return (match.group('name'),
                 match.group('version'),
                 match.group('release'),

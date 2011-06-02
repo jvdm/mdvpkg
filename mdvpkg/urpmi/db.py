@@ -391,6 +391,8 @@ class UrpmiPackage(object):
         self.summary = data['summary']
         self.media = data.get('media', '')
         self.install_time = data.get('install_time', 0)
+        self.disttag = data.get('disttag', '')
+        self.distepoch = data.get('distepoch', '')
         # FIXME Currently installed packages won't come with
         #       capabilities information:
         self.requires = data.get('requires', [])
