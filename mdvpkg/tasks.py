@@ -167,26 +167,6 @@ class TaskBase(dbus.service.Object):
         raise NotImplementedError()
 
 
-    def _run(self):
-        """Controls the co-routine running the task."""
-        def step(gen):
-            try:
-                gen.next()
-                if self.cancelled:
-                    gen.close()
-                    self.Finished(EXIT_CANCELLED)
-                    self._remove_and_cleanup()
-                else:
-                    gobject.idle_add(step, gen)
-            except StopIteration:
-                self.state = STATE_READY
-                self._on_ready()
-            except Exception as e:
-                self.Error(ERROR_TASK_EXCEPTION, e.message)
-                self.Finished(EXIT_FAILED)
-                self._remove_and_cleanup
-        gobject.idle_add(step, self.run())
-
     #
     # Task runner callbacks ...
     #
