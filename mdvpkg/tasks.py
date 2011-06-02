@@ -413,9 +413,15 @@ class ListPackagesTask(TaskBase):
 
         for attr in self.attributes:
             if package.latest_installed is not None:
-                install_details[attr] = getattr(package.latest_installed, attr)
+                value = getattr(package.latest_installed, attr)
+                if value == None:
+                    value = ''
+                install_details[attr] = value
             if package.latest_upgrade is not None:
-                upgrade_details[attr] = getattr(package.latest_upgrade, attr)
+                value = getattr(package.latest_upgrade, attr)
+                if value == None:
+                    value = ''
+                upgrade_details[attr] = value
 
         self.Package(index,
                      package.name,
