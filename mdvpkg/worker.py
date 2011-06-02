@@ -175,6 +175,7 @@ class Runner(object):
             self.task.on_ready()
             self.run_next_task()
         except Exception as e:
+            log.exception('task finished with exception')
             self.task.on_exception(e.message)
             self.run_next_task()
 
