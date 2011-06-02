@@ -12,15 +12,11 @@ libdir = $(prefix)/lib
 
 mdvpkg_dir = $(datadir)/mandriva/$(NAME)
 mdvpkg_docdir = $(docdir)/mandriva/$(NAME)
-mdvpkg_libdir = $(libdir)/mandriva/$(NAME)
 dbus_datadir = $(datadir)/dbus-1/system-services
 dbus_confdir = $(confdir)/dbus-1/system.d
 
 
 .PHONY: build $(TARBALL) install clean
-
-build:
-	python setup.py build_ext --inplace
 
 tarball: $(TARBALL)
 $(TARBALL):
@@ -31,7 +27,6 @@ $(TARBALL):
 install:
 	install -m755 -d $(mdvpkg_dir) \
 	                 $(mdvpkg_docdir) \
-	                 $(mdvpkg_libdir) \
 			 $(sbindir) \
 	                 $(dbus_datadir) \
 	                 $(dbus_confdir)
@@ -41,9 +36,7 @@ install:
 	install -m755 bin/mdvpkgd $(sbindir)
 	install -m644 dbus/*.conf $(dbus_confdir)
 	install -m644 dbus/*.service $(dbus_datadir)
-	install -m644 _rpmutils.so $(mdvpkg_libdir)
 
 clean:
 	@python setup.py clean --all --quiet 2> /dev/null
 	@rm -f $(TARBALL)
-	@rm -f _rpmutils.so

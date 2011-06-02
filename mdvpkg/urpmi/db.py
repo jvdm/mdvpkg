@@ -31,7 +31,6 @@ import gobject
 import logging
 import rpm
 
-import mdvpkg.rpmutils
 from mdvpkg.urpmi.media import UrpmiMedia
 
 
