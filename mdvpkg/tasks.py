@@ -130,10 +130,10 @@ class TaskBase(dbus.service.Object):
         self.state = STATE_CANCELLING
         if prev_state == STATE_QUEUED:
             self._runner.remove(self)
-        elif prev_state in {STATE_SETTING_UP, STATE_READY}:
+        if prev_state in {STATE_QUEUED, STATE_SETTING_UP, STATE_READY}:
             self.on_cancel()
-        # else the task state will be monitored by the runner and it
-        # will be cancelled by it.
+        # else the task is being monitored by the runner and it will
+        # be cancelled by it.
 
     #
     # D-Bus signals
