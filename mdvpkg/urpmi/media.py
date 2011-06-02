@@ -49,18 +49,12 @@ class UrpmiMedia(gobject.GObject):
             '%s/synthesis.hdlist.cz' % name
         )
 
-        # name-version-release[disttagdistepoch].arch regexp:
-
-        # FIXME This is a ugly hack.  Some packages comes with
-        #       disttag/distepoch in their file names, separated by
-        #       '-'.  And synthesis provides NVRA information in the
-        #       rpm file name.  So we check if <release> starts with
-        #       'm' for 'mdv' (our current disttag).
-
+        # name-version-release.arch regexp:
         self._nvra_re = re.compile('^(?P<name>.+)-'
                                        '(?P<version>[^-]+)-'
-                                       '(?P<release>[^m].*)\.'
+                                       '(?P<release>[^-].*)\.'
                                        '(?P<arch>.+)$')
+        # capabilities regexp:
         self._cap_re = re.compile('^(?P<name>[^[]+)'
                                       '(?:\[\*])*(?:\[(?P<cond>[<>=]*)'
                                       ' *(?P<ver>.*)])?')
@@ -73,10 +67,20 @@ class UrpmiMedia(gobject.GObject):
                 fields = line.rstrip('\n').split('@')[1:]
                 tag = fields[0]
                 if tag == 'info':
+                    if len(fields) >= 6:
+			pkg['disttag'] = fields[5]
+                    else:
+			pkg['disttag'] = None
+                    if len(fields) >= 7:
+			pkg['distepoch'] = fields[6]
+                    else:
+			pkg['distepoch'] = None
                     (pkg['name'],
                      pkg['version'],
                      pkg['release'],
-                     pkg['arch']) = self.parse_rpm_name(fields[1])
+                     pkg['arch']) = self.parse_rpm_name(fields[1],
+                                                        pkg['disttag'],
+                                                        pkg['distepoch'])
                     for (i, field) in enumerate(('epoch', 'size', 'group')):
                         pkg[field] = fields[2 + i]
                     yield pkg
@@ -87,24 +91,30 @@ class UrpmiMedia(gobject.GObject):
                                    'obsoletes'):
                     pkg[tag] = self._parse_capability_list(fields[1:])
 
-    def parse_rpm_name(self, name):
+    def parse_rpm_name(self, name, disttag, distepoch):
         """Return (name, version, release, arch) tuple from a rpm
         package name.
 
         Handle both names with and without
         {release}-{disttag}{distepoch}.
         """
+        ## If package has disttag and/or distepoch, we'll remove them
+        ## from the name so that it's parsable ...
+        dist = None
+        if disttag:
+            dist = "-" + disttag
+            if distepoch:
+		dist += distepoch
+            ix = name.rfind(dist + ".")
+            name = name[:ix] + name[ix+len(dist):]
+
         match = self._nvra_re.match(name)
         if not match:
             raise ValueError, 'Malformed RPM name: %s' % name
 
-        release = match.group('release')
-        if release.find('-') != -1:
-            release = release.split('-')[0]
-
         return (match.group('name'),
                 match.group('version'),
-                release,
+                match.group('release'),
                 match.group('arch'))
 
     def _parse_capability_list(self, cap_str_list):
