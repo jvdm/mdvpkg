@@ -29,6 +29,7 @@ import re
 import pyinotify
 import gobject
 import logging
+import rpm
 
 import mdvpkg.rpmutils
 from mdvpkg.urpmi.media import UrpmiMedia
@@ -168,33 +169,8 @@ class UrpmiDB(gobject.GObject):
         old_cache, self._cache = self._cache, {}
         self._groups = {}
 
-        ## Load installed packages ...
-        log.info('reading installed packages.')
-        rpm_command = "rpm %s -qa --qf '%s'" \
-            % (self.rpmdb_option,
-               '%{NAME}@%{VERSION}@%{RELEASE}@%{ARCH}@%|EPOCH?{%{EPOCH}}:{0}|'
-               '@%{SIZE}@%{GROUP}@%{SUMMARY}@%{INSTALLTIME}\\n')
-        rpm_p = subprocess.Popen(rpm_command,
-                                 stdout=subprocess.PIPE,
-                                 stdin=None,
-                                 shell=True)
-        for line in rpm_p.stdout:
-            package_data = dict(zip(['name', 'version', 'release', 
-                                     'arch', 'epoch', 'size', 
-                                     'group', 'summary', 'install_time'],
-                                    line.split('@')))
-            if not package_data['install_time']:
-                log.error('package installed without INSTALLTIME: %s',
-                          package_data['name'])
-            self._on_package_data(package_data)
-        rpm_p.wait()
-
-        ## Load packages from non-ignored medias ...        
-        log.info('reading packages from medias.')
-        for media in [ m for m in self.list_medias() if not m.ignore ]:
-            for package_data in media.list():
-                package_data['media'] = media.name
-                self._on_package_data(package_data)
+        self._load_installed_packages()
+        self._load_nonignored_media_packages()
 
         ## Compare new packages in the cache with the old ones ...
         for name in self._cache.iterkeys():
@@ -216,6 +192,35 @@ class UrpmiDB(gobject.GObject):
 
         self.cache_state = STATE_UPDATED
         log.info('package cache updated.')
+
+    def _load_installed_packages(self):
+        """Visit rpmdb and load data from installed packages."""
+        log.info('reading installed packages.')
+        urpmipkg_data = {}
+        for pkg in rpm.ts().dbMatch():
+            for attr in ('name', 'version', 'release', 'arch', 'epoch',
+                         'size', 'group', 'summary', 'installtime',
+                         'disttag', 'distepoch'):
+                value = pkg[attr]
+                if type(value) is list and len(value) == 0:
+                    value = ''
+                urpmipkg_data[attr] = value
+
+            if type(pkg['installtime']) is list:
+                urpmipkg_data['installtime'] = pkg['installtime'][0]
+
+            # TODO Load capabilities information in the same manner
+            #      Media.list_medias() will return.
+
+            self._on_package_data(urpmipkg_data)
+
+    def _load_nonignored_media_packages(self):
+        """Load packages from non-ignored medias."""
+        log.info('reading packages from medias.')
+        for media in [ m for m in self.list_medias() if not m.ignore ]:
+            for package_data in media.list():
+                package_data['media'] = media.name
+                self._on_package_data(package_data)
 
     def _on_package_data(self, package_data):
         """Handle package data found during cache update.
@@ -247,7 +252,7 @@ class UrpmiDB(gobject.GObject):
 
         installed = entry.installs.get(pkg.vr)
         if installed is not None:
-            if pkg.install_time:
+            if pkg.installtime is not None:
                 log.error('found two installed versions of '
                           'the same package: %s',
                           installed.name)
@@ -259,7 +264,7 @@ class UrpmiDB(gobject.GObject):
                             pkg.media)
             installed.media = pkg.media
         else:
-            if not pkg.install_time:
+            if pkg.installtime is None:
                 ## Check if upgrades or downgrades the higher installed
                 ## version ...
                 if entry.latest_installed is None \
@@ -390,9 +395,9 @@ class UrpmiPackage(object):
         self.group = data['group']
         self.summary = data['summary']
         self.media = data.get('media', '')
-        self.install_time = data.get('install_time', 0)
-        self.disttag = data.get('disttag', '')
-        self.distepoch = data.get('distepoch', '')
+        self.installtime = data.get('installtime')
+        self.disttag = data.get('disttag')
+        self.distepoch = data.get('distepoch')
         # FIXME Currently installed packages won't come with
         #       capabilities information:
         self.requires = data.get('requires', [])
@@ -403,7 +408,7 @@ class UrpmiPackage(object):
     @property
     def installed(self):
         """True if rpm is installed."""
-        return self.install_time != 0
+        return self.installtime != 0
 
     @property
     def vr(self):
