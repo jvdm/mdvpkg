@@ -443,14 +443,13 @@ class UrpmiPackage(object):
         if self.name != other.name:
             raise ValueError('Name mismatch %s != %s'
                              % (self.name, other.name))
-        if self.epoch > other.epoch:
-            return 1
-        elif self.epoch < other.epoch:
-            return -1
-        cmp = mdvpkg.rpmutils.rpmvercmp(self.version, other.version)
-        if cmp == 0:
-            cmp = mdvpkg.rpmutils.rpmvercmp(self.release, other.release)
-        return cmp
+        levr = '%d:%s-%s' % (self.epoch, self.version, self.release)
+        if self.distepoch:
+            levr += ':' + self.distepoch
+        revr = '%d:%s-%s' % (other.epoch, other.version, other.release)
+        if other.distepoch:
+            revr += ":" + other.distepoch
+        return rpm.evrCompare(levr, revr);
 
     def __str__(self):
         return '%s-%s-%s.%s' % self.nvra
