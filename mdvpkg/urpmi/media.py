@@ -75,8 +75,8 @@ class UrpmiMedia(gobject.GObject):
                     pkg.update(zip(('name', 'version', 'release', 'arch'),
                                    self.parse_rpm_name(
                                        fields[1],
-                                       pkg.get('disttag', ''),
-                                       pkg.get('distepoch', '')
+                                       pkg.get('disttag'),
+                                       pkg.get('distepoch')
                                    )))
                     for (i, field) in enumerate(('epoch', 'size', 'group')):
                         pkg[field] = fields[2 + i]
@@ -87,7 +87,7 @@ class UrpmiMedia(gobject.GObject):
                 elif tag in ('requires', 'provides', 'conflict', 'obsoletes'):
                     pkg[tag] = self._parse_capability_list(fields[1:])
 
-    def parse_rpm_name(self, name, disttag='', distepoch=''):
+    def parse_rpm_name(self, name, disttag=None, distepoch=None):
         """Return (name, version, release, arch) tuple from a rpm
         package name.
 
@@ -96,9 +96,12 @@ class UrpmiMedia(gobject.GObject):
         """
         # If package has disttag and/or distepoch, we'll remove them
         # from the name so that it's parsable:
-        tagepoch = '%s%s' % (disttag, distepoch)
-        if tagepoch:
-            name = name.replace('-' + tagepoch, '', 1)
+        if disttag is not None:
+            tagepoch = '-disttag'
+            if distepoch is not None:
+                tagepoch += distepoch
+            name = name.replace(tagepoch, '', 1)
+
         match = self._nvra_re.match(name)
         if not match:
             raise ValueError, 'Malformed RPM name: %s' % name
