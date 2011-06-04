@@ -34,10 +34,10 @@ use urpm::select qw();
 use urpm::main_loop qw();
 
 use constant {
-    STATUS_SOLVING => 'status-resolving',
-    STATUS_DOWNLOADING => 'status-downloading',
-    STATUS_INSTALLING => 'status-installing',
-    STATUS_SEARCHING => 'status-searching',
+    STATE_SOLVING => 'state-resolving',
+    STATE_DOWNLOADING => 'state-downloading',
+    STATE_INSTALLING => 'state-installing',
+    STATE_SEARCHING => 'state-searching',
 };
 
 $| = 1;
@@ -67,7 +67,7 @@ MAIN: {
 	}
 	or do {
 	    chomp($@);
-	    task_response('EXCEPTION', str => $@);
+	    task_exception($@);
 	};
     }
 }
@@ -103,12 +103,22 @@ sub task_response {
 
 sub task_signal {
     my ($signal_name, @args) = @_;
-    task_response("SIGNAL $signal_name", @args);
+    task_response('SIGNAL', str => $signal_name, @args);
 }
 
-sub task_status_changed {
-    my ($status) = @_;
-    task_signal('StatusChanged', str => $status)
+sub task_state_changed {
+    my ($state) = @_;
+    task_signal('StateChanged', str => $state);
+}
+
+sub task_exception {
+    my ($message) = @_;
+    task_response('EXCEPTION', str => $message);
+}
+
+sub task_error {
+    my ($code, $message) = @_;
+    task_response('ERROR', str => $code, str => $message);
 }
 
 sub task_done {
@@ -126,7 +136,7 @@ sub on_task__install_packages {
 
     ## Search packages by name, getting their id ...
 
-    task_status_changed(STATUS_SEARCHING);
+    task_state_changed(STATE_SEARCHING);
     my %packages;
     urpm::select::search_packages(
 	$urpm, 
@@ -144,7 +154,7 @@ sub on_task__install_packages {
 
     ## Resolve dependencies, get $state object ...
 
-    task_status_changed(STATUS_SOLVING);
+    task_state_changed(STATE_SOLVING);
     my $state = {};
     my $restart;
     $restart = urpm::select::resolve_dependencies(
@@ -174,7 +184,7 @@ sub on_task__install_packages {
 		my (undef, $file) = split(/: /, $urlfile);
 
 		if ($mode eq 'start') {
-		    $downloading or task_status_changed(STATUS_DOWNLOADING);
+		    $downloading or task_state_changed(STATE_DOWNLOADING);
 		    $downloading ||= 1;
 		    task_signal('DownloadStart', str => $file);
 		}
@@ -252,7 +262,7 @@ sub on_task__install_packages {
 	    },
 	    post_download => sub {
 		$downloading = 0;
-		task_status_changed(STATUS_INSTALLING);
+		task_state_changed(STATE_INSTALLING);
 	    },
 	    message => sub {
 		my ($_title, $msg) = @_; # graphical title

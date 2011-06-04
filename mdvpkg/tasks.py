@@ -610,4 +610,9 @@ class InstallPackagesTask(TaskBase):
         log.debug('Install(%s, %s, %s)', name, amount, total)
 
     def run(self, monitor_gen, urpmi, backend):
-        backend.install_packages(monitor_gen, self, self.names)
+        try:
+            monitor_gen.send(None)
+        except StopIteration:
+            pass
+        else:
+            backend.install_packages(monitor_gen, self, self.names)

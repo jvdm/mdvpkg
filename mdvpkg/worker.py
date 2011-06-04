@@ -45,8 +45,8 @@ class Backend(object):
     def __init__(self, path):
         self.path = path        
         self.proc = None
-        self.task = None
-        self.error = ''
+        self._task = None
+        self._runner_gen = None
 
     @property
     def running(self):
@@ -70,9 +70,7 @@ class Backend(object):
                              self._error_callback)
 
     def kill(self):
-        """ Send SIGTERM to the backend child asking and wait it to
-        exit.
-        """
+        """Send SIGTERM to the backend child and wait its death."""
         if not self.running:
             raise Exception, "kill() called and backend's not running"
         self.proc.send_signal(signal.SIGTERM)
@@ -81,18 +79,12 @@ class Backend(object):
         self.proc = None
         log_backend.debug('Backend killed')
 
-    def install_packages(self, task, names):
-        if self.task:
-            raise Exception, 'Already running a task'
-        self.task = task
+    def install_packages(self, runner_gen, task, names):
+        if self._task:
+            raise Exception, 'already running a task'
+        self._task = task
+        self._runner_gen = runner_gen
         self._send_task('install_packages', *names)
-
-    def task_has_done(self):
-        if not self.running:
-            raise BackendError, 'Backend has died.'
-        if self.error:
-            raise BackendError, self.error
-        return self.task == None
 
     def _send_task(self, task_name, *args):
         if not self.running:
@@ -108,24 +100,51 @@ class Backend(object):
         # always emit data linewise, so if there is data a line will
         # come shortly:            
         line = stdout.readline()
-        if line.startswith('%MDVPKG\t') and self.task:
-            self._handle_backend_line(*line.rstrip('\n').split('\t', 2)[1:])
+        if line.startswith('%MDVPKG\t') and self._task:
+            tag, arg_str = line.rstrip('\n').split('\t', 2)[1:]
+            try:
+                handler = getattr(self, '_handle_%s' % tag)
+            except AttributeError:
+                self._handle_EXCEPTION(
+                    'unknown response from backend: %s' % tag
+                )
+            else:
+                handler(eval(arg_str))
+                if tag != 'SIGNAL':
+                    self._clean()
         return True
 
     def _error_callback(self, stdout, condition):
-        self.error = 'Pipe error with backend.'
+        self._handle_EXCEPTION('backend pipe error')
+        self._clean()
         self.kill()
 
-    def _handle_backend_line(self, tag, arg_str):
-        if tag.startswith('SIGNAL'):
-            signal = tag.split(' ')[1]
-            getattr(self.task, signal)(*eval(arg_str))
-        elif tag.startswith('EXCEPTION'):
-            self.error = eval(arg_str)
-        elif tag.startswith('DONE'):
-            self.task = None
-        else:
-            self.error = 'Unknown response from backend: %s' % tag
+    def _clean(self):
+        self._task = None
+        self._runner_gen = None
+
+    #
+    # Response handlers
+    #
+
+    def _handle_SIGNAL(self, args):
+        signal_name = args[0]
+        args = args[1:]
+        getattr(self._task, signal_name)(*args)
+
+    def _handle_EXCEPTION(self, args):
+        try:
+            self._runner_gen.throw(BackendError, args[0])
+        except StopIteration:
+            pass
+
+    def _handle_ERROR(self, args):
+        self._runner_gen.send(*args)
+
+    def _handle_DONE(self, args):
+        log.debug('done received')
+        self._runner_gen.close()
+        log.debug('generator closed')
 
 
 class Runner(object):
