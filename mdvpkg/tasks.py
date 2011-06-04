@@ -267,7 +267,7 @@ class ListPackagesTask(TaskBase):
         self._package_list = []
 
     @dbus.service.signal(dbus_interface=mdvpkg.DBUS_TASK_INTERFACE,
-                         signature='ussa{sv}a{sv}')
+                         signature='ussaa{sv}aa{sv}')
     def Package(self, index, name, status, install_details, upgrade_details):
         log.debug('Package(%s, %s, %s)', index, name, status)
 
@@ -408,26 +408,32 @@ class ListPackagesTask(TaskBase):
             TaskBase._on_ready(self)
 
     def _emit_package(self, index, package):
-        install_details = {}
-        upgrade_details = {}
+        installs_details = dbus.Array()
+        upgrades_details = dbus.Array()
 
-        for attr in self.attributes:
-            if package.latest_installed is not None:
-                value = getattr(package.latest_installed, attr)
-                if value == None:
-                    value = ''
-                install_details[attr] = value
-            if package.latest_upgrade is not None:
-                value = getattr(package.latest_upgrade, attr)
-                if value == None:
-                    value = ''
-                upgrade_details[attr] = value
+        for rpm in package.installs.itervalues():
+            installs_details.append(self._get_details(rpm))
+        for rpm in package.upgrades.itervalues():
+            upgrades_details.append(self._get_details(rpm))
 
         self.Package(index,
                      package.name,
                      package.status,
-                     install_details,
-                     upgrade_details)
+                     installs_details,
+                     upgrades_details)
+
+    def _get_details(self, rpm):
+        details = {}
+        for attr in self.attributes:
+                value = getattr(rpm, attr)
+                if value == None:
+                    value = ''
+                # bypass type guessing in case of empty lists:
+                if type(value) is list and len(value) == 0:
+                    value = dbus.Array(value, signature='s')
+                details[attr] = value
+        return details
+
 
     #
     # Filter callbacks and helpers
