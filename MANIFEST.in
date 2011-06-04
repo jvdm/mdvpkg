@@ -1,0 +1,5 @@
+# distutils MANIFEST template, see:
+# http://docs.python.org/distutils/sourcedist.html#the-manifest-in-template
+
+include TODO
+graft doc/
