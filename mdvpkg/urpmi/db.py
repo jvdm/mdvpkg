@@ -442,10 +442,10 @@ class UrpmiPackage(object):
         if self.name != other.name:
             raise ValueError('Name mismatch %s != %s'
                              % (self.name, other.name))
-        levr = '%d:%s-%s' % (self.epoch, self.version, self.release)
+        levr = '%s:%s-%s' % (self.epoch, self.version, self.release)
         if self.distepoch:
             levr += ':' + self.distepoch
-        revr = '%d:%s-%s' % (other.epoch, other.version, other.release)
+        revr = '%s:%s-%s' % (other.epoch, other.version, other.release)
         if other.distepoch:
             revr += ":" + other.distepoch
         return rpm.evrCompare(levr, revr);
