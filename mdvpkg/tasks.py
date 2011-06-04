@@ -282,7 +282,7 @@ class ListGroupsTask(TaskBase):
     @dbus.service.signal(dbus_interface=mdvpkg.DBUS_TASK_INTERFACE,
                          signature='su')
     def Group(self, group, count):
-        log.debug('Group(%s, count)', group, count)
+        log.debug('Group(%s, %s)', group, count)
 
     @mdvpkg_coroutine_run
     def run(self, urpmi):
