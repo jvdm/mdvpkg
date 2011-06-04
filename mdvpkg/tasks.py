@@ -29,6 +29,7 @@ import dbus
 import dbus.service
 import dbus.service
 import uuid
+import functools
 
 import mdvpkg
 import mdvpkg.worker
@@ -52,6 +53,8 @@ STATE_QUEUED = 'state-queued'
 STATE_READY = 'state-ready'
 # The task has been requested to be cancelled
 STATE_CANCELLING = 'state-cancelling'
+# The task has just start running
+STATE_RUNNING = 'state-running'
 # The task is listing requested data
 STATE_LISTING = 'state-listing'
 # The task is Searching packages
@@ -64,6 +67,40 @@ STATE_DOWNLOADING = 'state-downloading'
 STATE_INSTALLING = 'state-installing'
 
 log = logging.getLogger('mdvpkgd.task')
+
+
+def mdvpkg_coroutine_run(corountine_run):
+    """Run method decorator for tasks run methods with co-routine
+    implementation (without backend).
+    """
+    @functools.wraps(corountine_run)
+    def run(self, monitor_gen, urpmi, *args):
+        try:
+            monitor_gen.send(None)
+        except StopIteration:
+            # task was already cancelled, we don't run the task:
+            pass
+        else:
+            def _coroutine(task_gen):
+                try:
+                    error = task_gen.next()
+                except StopIteration:
+                    monitor_gen.close()
+                except Exception as e:
+                    try:
+                        monitor_gen.throw(e)
+                    except StopIteration:
+                        pass
+                else:
+                    try:
+                        monitor_gen.send(error)
+                    except StopIteration:
+                        self.state = STATE_CANCELLING
+                        task_gen.close()
+                    else:
+                        gobject.idle_add(_coroutine, task_gen)
+            _coroutine(corountine_run(self, urpmi))
+    return run
 
 
 class TaskBase(dbus.service.Object):
@@ -81,6 +118,7 @@ class TaskBase(dbus.service.Object):
         self._sender = sender
         self._runner = runner
         self.state = STATE_SETTING_UP
+        self.canceled = False
 
         # Passed to backend when call_backend is called ...
         self.backend_args = []
@@ -126,11 +164,10 @@ class TaskBase(dbus.service.Object):
         """Cancel and remove the task."""
         log.debug('Cancel(): %s, %s', sender, self.path)
         self._check_same_user(sender)
-        prev_state = self.state
-        self.state = STATE_CANCELLING
-        if prev_state == STATE_QUEUED:
+        self.canceled = True
+        if self.state == STATE_QUEUED:
             self._runner.remove(self)
-        if prev_state in {STATE_QUEUED, STATE_SETTING_UP, STATE_READY}:
+        if self.state in {STATE_QUEUED, STATE_SETTING_UP, STATE_READY}:
             self.on_cancel()
         # else the task is being monitored by the runner and it will
         # be cancelled by it.
@@ -162,7 +199,7 @@ class TaskBase(dbus.service.Object):
                   state,
                   self.path)
 
-    def run(self):
+    def run(self, monitor_gen, urpmi, backend):
         """Default runner, must be implemented in childs."""
         raise NotImplementedError()
 
@@ -185,7 +222,13 @@ class TaskBase(dbus.service.Object):
         """Task run() has thrown an exception."""
         self.Error(ERROR_TASK_EXCEPTION, message)
         self.Finished(EXIT_FAILED)
-        self._remove_and_cleanup
+        self._remove_and_cleanup()
+
+    def on_error(self, code, message):
+        """Task was failed with error."""
+        self.Error(code, message)
+        self.Finished(EXIT_FAILED)
+        self._remove_and_cleanup()
 
     def _remove_and_cleanup(self):
         """Remove the task from the bus and clean up."""
@@ -225,6 +268,7 @@ class ListMediasTask(TaskBase):
     def Media(self, media_name, update, ignore):
         log.debug('Media(%s, %s, %s)', media_name, update, ignore)
 
+    @mdvpkg_coroutine_run
     def run(self, urpmi):
         self.state = STATE_LISTING
         for media in urpmi.list_medias():
@@ -240,6 +284,7 @@ class ListGroupsTask(TaskBase):
     def Group(self, group, count):
         log.debug('Group(%s, count)', group, count)
 
+    @mdvpkg_coroutine_run
     def run(self, urpmi):
         self.state = STATE_LISTING
         for (group, count) in urpmi.list_groups():
@@ -381,6 +426,7 @@ class ListPackagesTask(TaskBase):
         self._check_if_has_run()
         self._create_list = True
 
+    @mdvpkg_coroutine_run
     def run(self, urpmi):
         self.state = STATE_LISTING
         count = 0
@@ -563,13 +609,5 @@ class InstallPackagesTask(TaskBase):
     def Install(self, name, amount, total):
         log.debug('Install(%s, %s, %s)', name, amount, total)
 
-    def run(self, urpmi):
-        self.state = STATE_SEARCHING
-        try:
-            self.backend.install_packages(self, self.names)
-            while not self.backend.task_has_done():
-                yield
-            # TODO Ask daemon to update it's cache ...  something like
-            #      daemon.update_cache()
-        except GeneratorExit:
-            self.backend.cancel(self)
+    def run(self, monitor_gen, urpmi, backend):
+        backend.install_packages(monitor_gen, self, self.names)

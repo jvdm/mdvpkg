@@ -136,9 +136,9 @@ class Runner(object):
         self._urpmi = urpmi
         self._backend = Backend(backend_path)
         self.queue = collections.OrderedDict()
-        self.task = None
 
     def push(self, task):
+        """Add a task in the run queue."""
         log.debug('task queued: %s', task.path)
         if not self.queue:
             self.run_next_task()
@@ -146,36 +146,48 @@ class Runner(object):
         task.state = mdvpkg.tasks.STATE_QUEUED
 
     def remove(self, task):
+        """Remove a task in the queue."""
         self.queue.pop(task.path)
 
     def run_next_task(self):
-        self.task = None
+        """Run next task in the next loop iteration."""
         gobject.idle_add(self._run_next_task)
 
     def _run_next_task(self):
+        """Get the next task in queue to run."""
         try:
-            _, self.task = self.queue.popitem(last=False)
+            _, task = self.queue.popitem(last=False)
         except KeyError:
-            pass
+            log.info('queue is empty, no more tasks to run')
         else:
-            self.next_task_step(self.task.run(self._urpmi))
+            task.state = mdvpkg.tasks.STATE_RUNNING
+            task.run(self._task_monitor(task), self._urpmi, self._backend)
 
-    def next_task_step(self, task_gen):
-        try:
-            if self.task.state == mdvpkg.tasks.STATE_CANCELLING:
-                # signal the task's run method that cancelling was
-                # requested:
-                task_gen.close()
-                self.task.on_cancel()
+    def _task_monitor(self, task):
+        """Return a generator to listen for task status in co-routine
+        manner.
+
+        Run methods will be notified of task cancellation by catching
+        StopIteration from our generator (which is thrown when the
+        method returns).
+        """
+        while True:
+            if task.canceled is True:
+                gobject.idle_add(task.on_cancel)
+                break
+            try:
+                # if error is None the task is running with no errors:
+                error = yield
+            except GeneratorExit:
+                task.state = mdvpkg.tasks.STATE_READY
+                task.on_ready()
+                break
+            except Exception as e:
+                log.exception('task finished with exception')
+                task.on_exception(e.message)
+                break
             else:
-                task_gen.next()
-                gobject.idle_add(self.next_task_step, task_gen)
-        except StopIteration:
-            self.task.state = mdvpkg.tasks.STATE_READY
-            self.task.on_ready()
-            self.run_next_task()
-        except Exception as e:
-            log.exception('task finished with exception')
-            self.task.on_exception(e.message)
-            self.run_next_task()
-
+                if error is not None:
+                    task.on_error(*error)
+                    break
+        self.run_next_task()
