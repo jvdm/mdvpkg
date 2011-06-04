@@ -97,7 +97,7 @@ class UrpmiMedia(gobject.GObject):
         # If package has disttag and/or distepoch, we'll remove them
         # from the name so that it's parsable:
         if disttag is not None:
-            tagepoch = '-disttag'
+            tagepoch = '-%s' % disttag
             if distepoch is not None:
                 tagepoch += distepoch
             name = name.replace(tagepoch, '', 1)
