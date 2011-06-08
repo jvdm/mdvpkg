@@ -385,8 +385,8 @@ class ListPackagesTask(TaskBase):
         if self.state != STATE_READY:
             log.info('attempt to call Get() without STATE_READY')
             raise mdvpkg.exceptions.TaskBadState
-        status, rpm = self._package_list[index]
-        self._emit_package(index, status, rpm, attributes)
+        package = self._package_list[index]
+        self.Package(*self._get_package_data(index, package))
 
     @dbus.service.method(mdvpkg.DBUS_TASK_INTERFACE,
                          in_signature='sb',
@@ -438,16 +438,17 @@ class ListPackagesTask(TaskBase):
                 self._package_list.append(package)
             else:
                 count += 1
-                self._emit_package(count, package)
+                data = self._get_package_data(count, package)
+                self.Package(*data)
             yield
 
-    def _on_ready(self):
+    def on_ready(self):
         if self._create_list:
-            self.Ready(len(self._pkg_cache))
+            self.Ready(len(self._package_list))
         else:
-            TaskBase._on_ready(self)
+            TaskBase.on_ready(self)
 
-    def _emit_package(self, index, package):
+    def _get_package_data(self, index, package):
         installs_details = dbus.Array()
         upgrades_details = dbus.Array()
 
@@ -456,11 +457,8 @@ class ListPackagesTask(TaskBase):
         for rpm in package.upgrades.itervalues():
             upgrades_details.append(self._get_details(rpm))
 
-        self.Package(index,
-                     package.name,
-                     package.status,
-                     installs_details,
-                     upgrades_details)
+        return (index, package.name, package.status,
+                    installs_details, upgrades_details)
 
     def _get_details(self, rpm):
         details = {}
