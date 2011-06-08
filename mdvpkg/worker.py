@@ -155,11 +155,12 @@ class Runner(object):
         self._urpmi = urpmi
         self._backend = Backend(backend_path)
         self.queue = collections.OrderedDict()
+        self.running = False
 
     def push(self, task):
         """Add a task in the run queue."""
         log.debug('task queued: %s', task.path)
-        if not self.queue:
+        if not self.running:
             self.run_next_task()
         self.queue[task.path] = task
         task.state = mdvpkg.tasks.STATE_QUEUED
@@ -178,7 +179,9 @@ class Runner(object):
             _, task = self.queue.popitem(last=False)
         except KeyError:
             log.info('queue is empty, no more tasks to run')
+            self.running = False
         else:
+            self.running = True
             task.state = mdvpkg.tasks.STATE_RUNNING
             runner_gen = self._task_monitor(task)
             try:
