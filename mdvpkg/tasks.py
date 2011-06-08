@@ -75,31 +75,25 @@ def mdvpkg_coroutine_run(corountine_run):
     """
     @functools.wraps(corountine_run)
     def run(self, monitor_gen, urpmi, *args):
-        try:
-            monitor_gen.send(None)
-        except StopIteration:
-            # task was already cancelled, we don't run the task:
-            pass
-        else:
-            def _coroutine(task_gen):
+        def _coroutine(task_gen):
+            try:
+                error = task_gen.next()
+            except StopIteration:
+                monitor_gen.close()
+            except Exception as e:
                 try:
-                    error = task_gen.next()
+                    monitor_gen.throw(e)
                 except StopIteration:
-                    monitor_gen.close()
-                except Exception as e:
-                    try:
-                        monitor_gen.throw(e)
-                    except StopIteration:
-                        pass
+                    pass
+            else:
+                try:
+                    monitor_gen.send(error)
+                except StopIteration:
+                    self.state = STATE_CANCELLING
+                    task_gen.close()
                 else:
-                    try:
-                        monitor_gen.send(error)
-                    except StopIteration:
-                        self.state = STATE_CANCELLING
-                        task_gen.close()
-                    else:
-                        gobject.idle_add(_coroutine, task_gen)
-            _coroutine(corountine_run(self, urpmi))
+                    gobject.idle_add(_coroutine, task_gen)
+        _coroutine(corountine_run(self, urpmi))
     return run
 
 
@@ -610,9 +604,4 @@ class InstallPackagesTask(TaskBase):
         log.debug('Install(%s, %s, %s)', name, amount, total)
 
     def run(self, monitor_gen, urpmi, backend):
-        try:
-            monitor_gen.send(None)
-        except StopIteration:
-            pass
-        else:
-            backend.install_packages(monitor_gen, self, self.names)
+        backend.install_packages(monitor_gen, self, self.names)

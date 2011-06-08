@@ -180,7 +180,13 @@ class Runner(object):
             log.info('queue is empty, no more tasks to run')
         else:
             task.state = mdvpkg.tasks.STATE_RUNNING
-            task.run(self._task_monitor(task), self._urpmi, self._backend)
+            runner_gen = self._task_monitor(task)
+            try:
+                runner_gen.send(None)
+            except StopIteration:
+                log.error('task canceled while in queue and not removed')
+            else:
+                task.run(runner_gen, self._urpmi, self._backend)
 
     def _task_monitor(self, task):
         """Return a generator to listen for task status in co-routine
