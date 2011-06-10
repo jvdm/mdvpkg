@@ -386,8 +386,7 @@ class ListPackagesTask(TaskBase):
             log.info('attempt to call Get() without STATE_READY')
             raise mdvpkg.exceptions.TaskBadState
         package, installs, upgrades = self._package_list[index]
-        self._emit_package(self,
-                           index,
+        self._emit_package(index,
                            package,
                            attributes,
                            installs,
@@ -405,9 +404,9 @@ class ListPackagesTask(TaskBase):
             log.info('attempt to call Sort() without STATE_READY')
             raise mdvpkg.exceptions.TaskBadState
         if key in {'status', 'name'}:
-            key_func = lambda pkg: getattr(pkg, key)
+            key_func = lambda data: getattr(data[0], key)
         else:
-            key_func = lambda pkg: getattr(pkg.latest, key)
+            key_func = lambda data: getattr(data[0].latest, key)
         self._package_list.sort(key=key_func, reverse=reverse)
 
     @dbus.service.method(mdvpkg.DBUS_TASK_INTERFACE,
@@ -441,7 +440,7 @@ class ListPackagesTask(TaskBase):
             upgrades = self._select_versions(package.upgrades.values())
             if installs or upgrades:
                 if self._create_list:
-                    self._package_list.append(package, intalls, upgrades)
+                    self._package_list.append((package, installs, upgrades))
                 else:
                     self._emit_package(count,
                                        package,

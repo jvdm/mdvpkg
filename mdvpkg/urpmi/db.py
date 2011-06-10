@@ -363,7 +363,7 @@ class PackageCacheEntry(gobject.GObject):
     @property
     def latest(self):
         """The latest package in the entry based."""
-        if self.status in {'new', 'upgrade'}:
+        if self.status in {'new'}:
             return self.latest_upgrade
         else:
             return self.latest_installed
