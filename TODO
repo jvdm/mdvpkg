@@ -15,3 +15,5 @@ mdvpkg TODO List
 * Decide how to report back to clients the number of packages in list
   by status -- try no to use Ready signal since it can be used by
   different cached results, and not just packages.
+
+* Put versions list in version order (probably using OrderedDict()).
