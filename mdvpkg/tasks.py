@@ -385,8 +385,13 @@ class ListPackagesTask(TaskBase):
         if self.state != STATE_READY:
             log.info('attempt to call Get() without STATE_READY')
             raise mdvpkg.exceptions.TaskBadState
-        package = self._package_list[index]
-        self.Package(*self._get_package_data(index, package))
+        package, installs, upgrades = self._package_list[index]
+        self._emit_package(self,
+                           index,
+                           package,
+                           attributes,
+                           installs,
+                           upgrades)
 
     @dbus.service.method(mdvpkg.DBUS_TASK_INTERFACE,
                          in_signature='sb',
@@ -425,21 +430,25 @@ class ListPackagesTask(TaskBase):
         self.state = STATE_LISTING
         count = 0
         for package in urpmi.list_packages():
-
-            ## Apply filters ...
+            ## Apply filters to package entries ...
             if self._is_filtered(package.name, 'name') \
                     or self._is_filtered(package.status, 'status'):
                 continue
-            if self._is_filtered(package.latest.media, 'media') \
-                    or self._is_filtered(package.latest.group, 'group'):
-                continue
 
-            if self._create_list:
-                self._package_list.append(package)
-            else:
-                count += 1
-                data = self._get_package_data(count, package)
-                self.Package(*data)
+            ## Apply filters to package version and select only
+            ## entries with versions available ...
+            installs = self._select_versions(package.installs.values())
+            upgrades = self._select_versions(package.upgrades.values())
+            if installs or upgrades:
+                if self._create_list:
+                    self._package_list.append(package, intalls, upgrades)
+                else:
+                    self._emit_package(count,
+                                       package,
+                                       self.attributes,
+                                       installs,
+                                       upgrades)
+                    count += 1
             yield
 
     def on_ready(self):
@@ -448,21 +457,31 @@ class ListPackagesTask(TaskBase):
         else:
             TaskBase.on_ready(self)
 
-    def _get_package_data(self, index, package):
-        installs_details = dbus.Array()
-        upgrades_details = dbus.Array()
+    def _select_versions(self, version_list):
+        selected = []
+        for rpm in version_list:
+            if self._is_filtered(rpm.media, 'media') \
+                    or self._is_filtered(rpm.group, 'group'):
+                continue
+            selected.append(rpm)
+        return selected
 
-        for rpm in package.installs.itervalues():
-            installs_details.append(self._get_details(rpm))
-        for rpm in package.upgrades.itervalues():
-            upgrades_details.append(self._get_details(rpm))
+    def _emit_package(self, count, package, attributes, installs, upgrades):
+        inst_details = dbus.Array()
+        upgr_details = dbus.Array()
+        for rpm in installs:
+            inst_details.append(self._select_version_attrs(rpm, attributes))
+        for rpm in upgrades:
+            upgr_details.append(self._select_version_attrs(rpm, attributes))
+        self.Package(count,
+                     package.name,
+                     package.status,
+                     inst_details,
+                     upgr_details)
 
-        return (index, package.name, package.status,
-                    installs_details, upgrades_details)
-
-    def _get_details(self, rpm):
+    def _select_version_attrs(self, rpm, attributes):
         details = {}
-        for attr in self.attributes:
+        for attr in attributes:
                 value = getattr(rpm, attr)
                 if value == None:
                     value = ''
@@ -471,7 +490,6 @@ class ListPackagesTask(TaskBase):
                     value = dbus.Array(value, signature='s')
                 details[attr] = value
         return details
-
 
     #
     # Filter callbacks and helpers
