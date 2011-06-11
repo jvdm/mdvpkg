@@ -22,7 +22,7 @@
 """Mandriva package daemon."""
 
 __author__  = "J. Victor Martins <jvdm@mandriva.com>"
-__version__ = "0.6.2"
+__version__ = "0.6.3"
 
 DBUS_SERVICE = 'org.mandrivalinux.mdvpkg'
 DBUS_INTERFACE = 'org.mandrivalinux.mdvpkg'
