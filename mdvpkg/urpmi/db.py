@@ -390,7 +390,7 @@ class UrpmiPackage(object):
         self.release = data['release']
         self.arch = data['arch']
         self.epoch = data['epoch']
-        self.size = data['size']
+        self.size = int(data['size'])
         self.group = data['group']
         self.summary = data['summary']
         self.media = data.get('media', '')
