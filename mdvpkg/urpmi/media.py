@@ -85,7 +85,11 @@ class UrpmiMedia(gobject.GObject):
                 elif tag == 'summary':
                     pkg['summary'] = fields[1]
                 elif tag in ('requires', 'provides', 'conflict', 'obsoletes'):
-                    pkg[tag] = self._parse_capability_list(fields[1:])
+                    # FIXME Currently we are not parsing capabilities
+                    #       since we are not solving dependencies.
+                    #
+                    # pkg[tag] = self._parse_capability_list(fields[1:])
+                    pass
 
     def parse_rpm_name(self, name, disttag=None, distepoch=None):
         """Return (name, version, release, arch) tuple from a rpm
