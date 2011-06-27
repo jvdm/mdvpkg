@@ -46,7 +46,8 @@ setup(
     data_files=[
         ('/etc/dbus-1/system.d/', glob('dbus/*.conf')),
         ('/usr/share/dbus-1/system-services/', glob('dbus/*.service')),
-        (mdvpkg.DEFAULT_BACKEND_DIR, ['backend/urpmi_backend.pl']),
+        (mdvpkg.DEFAULT_BACKEND_DIR, ['backend/urpmi_backend.pl',
+                                      'backend/resolve.pl']),
     ],
     options={
         'install': { 'install_purelib': mdvpkg.DEFAULT_DATA_DIR,
