@@ -20,7 +20,7 @@
 ## Author(s): Eugeni Dodonov <eugeni@mandriva.com>
 ##            J. Victor Martins <jvdm@mandriva.com>
 ##
-"""UrpmiDB classes."""
+"""Class to represent and manipulate the urpmi db."""
 
 
 import os.path
@@ -30,17 +30,13 @@ import pyinotify
 import gobject
 import logging
 import rpm
+import logging
 
+import mdvpkg
 from mdvpkg.urpmi.media import UrpmiMedia
+from mdvpkg.urpmi.packages import RpmPackage
+from mdvpkg.urpmi.packages import Package
 
-
-## Cache states:
-# Cache is updated:
-STATE_UPDATED = 'state-updated'
-# Cache is outdated (configuration file has changed):
-STATE_OUTDATED = 'state-outdated'
-# Cache is broken (configuration file is missing or broken):
-STATE_MISSING_CONFIG = 'state-missing-config'
 
 log = logging.getLogger('mdvpkgd.urpmi')
 
@@ -48,33 +44,23 @@ log = logging.getLogger('mdvpkgd.urpmi')
 class UrpmiDB(gobject.GObject):
     """Provide access to the urpmi database of medias and packages."""
 
-    __gsignals__ = {
-        'new-package': ( gobject.SIGNAL_RUN_FIRST,
-                         gobject.TYPE_NONE,
-                         (gobject.TYPE_STRING,) ),
-        'cache-outdated': ( gobject.SIGNAL_RUN_FIRST,
-                            gobject.TYPE_NONE,
-                            () ),
-    }
-
     def __init__(self, 
                  conf_dir='/etc/urpmi',
                  data_dir='/var/lib/urpmi',
                  conf_file='urpmi.cfg',
-                 rpmdb_path=None):
+                 rpm_dbpath=None,
+                 backend_dir=None):
         gobject.GObject.__init__(self)
         self._conf_dir = os.path.abspath(conf_dir)
         self._data_dir = os.path.abspath(data_dir)
         self._conf_path = '%s/%s' % (self._conf_dir, conf_file)
-        if rpmdb_path is None:
-            self.rpmdb_option = ''
+        self._rpm_dbpath = rpm_dbpath
+        if backend_dir is None:
+            self.backend_dir = mdvpkg.DEFAULT_BACKEND_DIR
         else:
-            self.rpmdb_option = '--dbpath %s' % rpmdb_path
-
-        ## Cache data and state ...
-        self._cache_state = STATE_OUTDATED
+            self.backend_dir = backend_dir
         self._cache = {}  # package cache with data read from medias
-        self._groups = {}  # list of package groups found in cache
+        self._medias = {}
 
         ## Set up inotify for changes in configuration file, use
         ## gobject.io_add_watch() for new inotify events ...
@@ -92,20 +78,9 @@ class UrpmiDB(gobject.GObject):
                              gobject.IO_IN,
                              self._ino_in_callback)
 
-    @property
-    def cache_state(self):
-        """Package cache state."""
-        return self._cache_state
-
-    @cache_state.setter
-    def cache_state(self, value):
-        if value == STATE_OUTDATED:
-            self.emit('cache-outdated')
-        self._cache_state = value
-
-    def list_medias(self):
-        """Visit configuration file, locate and yield all configured
-        medias.
+    def configure_medias(self):
+        """Read configuration file, locate and populate the list of
+        configured medias.
         """
         media_r = re.compile('^(.*) {([\s\S]*?)\s*}', re.MULTILINE)
         ignore_r = re.compile('.*(ignore).*')
@@ -113,6 +88,7 @@ class UrpmiDB(gobject.GObject):
         key_r = re.compile('.*key-ids:\s* (.*).*')
         url_r = re.compile('(.*) (.*://.*|/.*$)')
         log.debug('reading %s to list medias', self._conf_path)
+        self._medias = {}
         with open(self._conf_path, 'r') as fd:
             data = fd.read()
             res = media_r.findall(data)
@@ -134,89 +110,95 @@ class UrpmiDB(gobject.GObject):
                     ignore = True
                 if update_r.search(values):
                     update = True
-                yield UrpmiMedia(media, update, ignore,
-                                 data_dir=self._data_dir,
-                                 key=key)
+                media = UrpmiMedia(media, update, ignore,
+                                   data_dir=self._data_dir,
+                                   key=key)
+                self._medias[media.name] = media
+
+    def list_active_medias(self):
+        """Return a list of active configured medias objects."""
+        return filter(lambda media: media.ignore is False,
+                      self._medias.values())
+
+    def load_packages(self):
+        """Load package information from rpmdb and active medias and
+        generate the package cache.
+        """
+        self._load_installed_packages()
+        self._load_active_media_packages()
+
+    def get_package(self, name_arch):
+        return self._cache[name_arch]
 
     def list_packages(self):
         """Iteration over all packages entries in the database.
-        
-        Populate the package cache first if it's outdated.
         """
-        log.info('listing packages.')
-        self._check_cache_state()
         return self._cache.itervalues()
 
-    def list_groups(self):
-        """Iteration over all package groups in the database."""
-        log.info('listing groups.')
-        self._check_cache_state()
-        return self._groups.iteritems()
+    def resolve_install_deps(self, name_arch):
+        """Resolve all install deps to install package and return a
+        dictionary of actions.
+        """
 
-    def _check_cache_state(self):
-        if self.cache_state == STATE_OUTDATED:
-            log.debug('cache is outdated, updating cache.')
-            self._update_cache()
-        elif self.cache_state == STATE_MISSING_CONFIG:
-            # FIXME Is this the best way to handle it?
-            raise Exception, 'urpmi configuration was deleted'
+        selected = {'action-install': [],
+                    'action-auto-install': []}
+        backend = subprocess.Popen(self.backend_dir + '/resolve.pl',
+                                   shell=True,
+                                   stdin=subprocess.PIPE,
+                                   stdout=subprocess.PIPE)
+        # ATTENTION: We're using RpmPackage.__str__() as argument to
+        #            the backend.
+        backend.stdin.write('%s\n' % self._cache[name_arch].latest_upgrade)
+        for line in backend.communicate()[0].split('\n'):
+            fields = line.split()
+            if fields and fields[0] == '%MDVPKG':
+                if fields[1] == 'ERROR':
+                    raise Exception,'Backend error: %s' % fields[2]
+                elif fields[1] == 'SELECTED':
+                    selected[fields[2]].append(tuple(fields[3].split('@')))
+        return selected
 
-    def _update_cache(self):
-        """Loads package data from urpmi database to the package cache."""
-        # forget previous data:
-        self.cache_state = STATE_OUTDATED
-        old_cache, self._cache = self._cache, {}
-        self._groups = {}
+    def auto_select(self):
+        """Resolve all install deps to install all upgradable packages
+        and return a dictionary of actions.
+        """
+        raise NotImplementedError
 
-        self._load_installed_packages()
-        self._load_nonignored_media_packages()
-
-        ## Compare new packages in the cache with the old ones ...
-        for name in self._cache.iterkeys():
-            if name not in old_cache:
-                self.emit('new-package', name)
-        while True:
-            try:
-                name, old_entry = old_cache.popitem()
-            except KeyError:
-                break
-            else:
-                new_entry = self._cache.pop(name, None)
-                if new_entry is None:
-                    old_entry.emit('deleted')
-                else:
-                    old_entry.update(new_entry)
-                    self._cache[name] = old_entry
-                    old_entry.emit('updated')
-
-        self.cache_state = STATE_UPDATED
-        log.info('package cache updated.')
+    def perform_install(self, nas):
+        bakcend = subprocess.Popen(self.backend_dir + '/install.pl',
+                                   stdin=subprocess.PIPE,
+                                   stdout=subprocess.PIPE)
+        rpms = filter(lambda na: self._cache[na].latest_upgrade, nas)
+        print rpms
 
     def _load_installed_packages(self):
         """Visit rpmdb and load data from installed packages."""
         log.info('reading installed packages.')
-        urpmipkg_data = {}
+        if self._rpm_dbpath is not None:
+            rpm.addMacro('_dbpath', self._rpm_dbpath)
         for pkg in rpm.ts().dbMatch():
+            # TODO Load capabilities information in the same manner
+            #      Media.list_medias() will return.
+            pkgdict = {}
             for attr in ('name', 'version', 'release', 'arch', 'epoch',
                          'size', 'group', 'summary', 'installtime',
                          'disttag', 'distepoch'):
                 value = pkg[attr]
                 if type(value) is list and len(value) == 0:
                     value = ''
-                urpmipkg_data[attr] = value
+                pkgdict[attr] = value
 
             if type(pkg['installtime']) is list:
-                urpmipkg_data['installtime'] = pkg['installtime'][0]
+                pkgdict['installtime'] = pkg['installtime'][0]
+            if pkgdict['epoch'] is None:
+                pkgdict['epoch'] = 0
+            self._on_package_data(pkgdict)
+        rpm.delMacro('_dbpath')
 
-            # TODO Load capabilities information in the same manner
-            #      Media.list_medias() will return.
-
-            self._on_package_data(urpmipkg_data)
-
-    def _load_nonignored_media_packages(self):
-        """Load packages from non-ignored medias."""
-        log.info('reading packages from medias.')
-        for media in [ m for m in self.list_medias() if not m.ignore ]:
+    def _load_active_media_packages(self):
+        """Load packages from active medias."""
+        log.info('reading packages from active medias.')
+        for media in self.list_active_medias():
             for package_data in media.list():
                 package_data['media'] = media.name
                 self._on_package_data(package_data)
@@ -231,48 +213,15 @@ class UrpmiDB(gobject.GObject):
         # FIXME It's possible that two packages with same VR exists
         #       from different media, we assume that it won't happen.
 
-        pkg = UrpmiPackage(package_data)
+        rpm = RpmPackage(package_data)
 
-        ## Add group data ...
-
-        # FIXME How to signal updates in group information? Clients
-        #       may benefit from this to update interfaces.
-        if pkg.group not in self._groups:
-            self._groups[pkg.group] = 1
-        else:
-            self._groups[pkg.group] += 1
-
-        ## Update cache entry ...
-        entry = self._cache.get(pkg.name)
-        if entry is None:
-            # create new cache entry:
-            entry = PackageCacheEntry(pkg.name)
-            self._cache[pkg.name] = entry
-
-        installed = entry.installs.get(pkg.vr)
-        if installed is not None:
-            if pkg.installtime is not None:
-                log.error('found two installed versions of '
-                          'the same package: %s',
-                          installed.name)
-            if installed.media:
-                log.warning('found same version of package %s in two '
-                            'different medias: %s and %s.',
-                            installed.name,
-                            installed.media,
-                            pkg.media)
-            installed.media = pkg.media
-        else:
-            if pkg.installtime is None:
-                ## Check if upgrades or downgrades the higher installed
-                ## version ...
-                if entry.latest_installed is None \
-                        or pkg > entry.latest_installed:
-                    entry.upgrades[pkg.vr] = pkg
-                else:
-                    entry.downgrades[pkg.vr] = pkg
-            else:
-                entry.installs[pkg.vr] = pkg
+        ## Update package names ...
+        pkgname = self._cache.get(rpm.na)
+        if pkgname is None:
+            # create new pkgname:
+            pkgname = Package(rpm.na, self)
+            self._cache[pkgname.na] = pkgname
+        pkgname.add_version(rpm)
 
     def _conf_dir_ino_handler(self, event):
         """Configuration directory ionotify event handler."""
@@ -282,178 +231,240 @@ class UrpmiDB(gobject.GObject):
         # currently only watching the configuration file:
         if event.pathname == self._conf_path:
             if event.mask & (pyinotify.IN_MODIFY):
-                log.info('urpmi configuration has changed.')
-                self.cache_state = STATE_OUTDATED
+                self._on_configuration_changed()
             elif event.mask & (pyinotify.IN_DELETE
                                    | pyinotify.IN_DELETE_SELF
                                    | pyinotify.IN_MOVE_SELF):
-                log.info('urpmi configuration has been removed.')
-                self.cache_state = STATE_BROKEN
+                self._on_configuration_deleted()
             else:
                 log.warning('ignored inotify event in urpmi configuration '
                             'file: %s',
                             event.eventmaskname)
+
+    def _on_configuration_changed(self):
+        log.info('urpmi configuration has changed.')
+        self.configure_medias()
+
+    def _on_configuration_deleted(self):
+        log.info('urpmi configuration has been removed.')
+        self._medias = {}
 
     def _ino_in_callback(self, fd, condition):
         """Inotify gobject io_watch callback."""
         self.ino_notifier.read_events()
         self.ino_notifier.process_events()
         return True
-        
 
-class PackageCacheEntry(gobject.GObject):
-    """Represent a package in the urpmi database cache."""
 
-    __gsignals__ = {
-        'deleted': (
-            gobject.SIGNAL_RUN_FIRST,
-            gobject.TYPE_NONE,
-            ()
-        ),
-        'updated': (
-            gobject.SIGNAL_RUN_FIRST,
-            gobject.TYPE_NONE,
-            ()
-        ),
-    }
+ACTION_NO_ACTION = 'action-no-action'
+ACTION_INSTALL = 'action-install'
+ACTION_AUTO_INSTALL = 'action-auto-install'
+ACTION_REMOVE = 'action-remove'
+ACTION_AUTO_REMOVE = 'action-auto-remove'
 
-    def __init__(self, name):
+
+class PackageList(gobject.GObject):
+    """Represent the list of packages in the rpm/urpmi database."""
+
+    def __init__(self, urpmi):
         gobject.GObject.__init__(self)
-        self.name = name
-        self.installs = {}
-        self.upgrades = {}
-        self.downgrades = {}
+        self._urpmi = urpmi
+        self._items = {}
+        self._names = []
+        self._filters = {}
+        self.filter_names = {'name', 'group','status', 'media', 'action'}
+        for pkgname in self._urpmi.list_packages():
+            self._items[pkgname.na] = {
+                'ids': {
+                    'deleted':
+                        pkgname.connect('deleted', self._on_deleted),
+                    'installed-version':
+                        pkgname.connect('installed-version',
+                                        self._on_installed_version),
+                    'removed-version':
+                        pkgname.connect('removed-version',
+                                        self._on_removed_version),
+                    'new-version':
+                        pkgname.connect('new-version',
+                                        self._on_new_version)
+                },
+                'action': ACTION_NO_ACTION,
+                'sort_key': None,
+            }
+            self._names.append(pkgname.na)
+        self._reverse = False
+        # urpmi transaction to perform actions ...
+        self._transaction = None
 
-    def update(self, other_entry):
-        """Update us to reflect package information from another
-        entry.
+    def sort(self, key_name, reverse=False):
+        """Sort the list of packages using key_name as key."""
+        for na in self._items.iterkeys():
+            item = self._items[na]
+            package = self._urpmi.get_package(na)
+            # Get the sort key value for an item in the list ...
+            if key_name in {'status'}:
+                key = package.status
+            elif key_name in {'action'}:
+                key = item['action']
+            else:
+                key = getattr(package.latest, key_name)
+            self._items[na]['sort_key'] = key
+        self._reverse = reverse
+        self._sort_and_filter()
 
-        After this the two entries will essencially provide the same
-        package information.
+    def get(self, index):
+        na = self._names[index]
+        package = self._urpmi.get_package(na)
+        item = self._items[na]
+        attrdict = {'status': package.status,
+                    'action': item['action'],
+                    'name': package.name,
+                    'arch': package.arch,
+                    'rpm': package.latest}
+        return attrdict   
+
+    def install(self, index):
+        """Select a package for installation and all it's dependencies."""
+        for action, names in self._urpmi.resolve_install_deps(
+                                 self._names[index]
+                             ).iteritems():
+            for na in names:
+                self._items[na]['action'] = action
+
+    def auto_select(self):
+        """Select all upgradable packages for installation."""
+        for action, names in self._urpmi.auto_select().iteritems():
+            for na in names:
+                self._items[na]['action'] = action
+
+    def resolve_dependecies(self):
+        """Check package actions and resolve dependencies to apply
+        them.
         """
-        if self.name != other_entry.name:
-            raise ValueError, ( 'updating entries for different '
-                                'packages: %s, %s'
-                                % (self.name, other_entry.name) )
-        self.installs = other_entry.installs
-        self.upgrades = other_entry.upgrades
-        self.downgrades = other_entry.downgrades
+        self._transaction = self._urpmi.create_transaction()
+        installs = filter(
+            lambda na: self._items[na]['action'] == 'ACTION_INSTALL',
+            self._items.itervalues()
+        )
+        for na in installs:
+            self._transaction.install(na)
+        self._transaction.resolve_dependencies()
+        for action, names in self._transaction.actions():
+            for na in names:
+                self._items[na]['action'] = action
 
-    @property
-    def status(self):
-        """Package entry status."""
-        if self.installs:
-            if self.upgrades:
-                return 'upgrade'
-            return 'installed'
-        return 'new'
+    def commit_actions(self):
+        """Process the selected actions and their dependencies.
+        """
+        installs = []
+        removes = []
+        for na, item in self._items.iteritems():
+            if item['action'] == ACTION_INSTALL:
+                installs.append(na)
+            elif item['action'] == ACTION_REMOVE:
+                removes.append(na)
+        return self._urpmi.create_transaction(install=installs,
+                                              remove=removes)
 
-    @property
-    def latest_installed(self):
-        if not self.installs:
-            return None
-        return sorted(self.installs.values())[-1]
+    def get_groups(self):
+        """Return the dict of package groups and package count in
+        the filtered list.
+        """
+        return self._count_groups(self._names)
 
-    @property
-    def latest_upgrade(self):
-        if not self.upgrades:
-            return None
-        return sorted(self.upgrades.values())[-1]
+    def get_all_groups(self):
+        """Return the dict of packages groups and package count in the
+        unfiltered list.
+        """
+        return self._count_groups(self._items.iterkeys())
 
-    @property
-    def latest(self):
-        """The latest package in the entry based."""
-        if self.status in {'new'}:
-            return self.latest_upgrade
+    def _count_groups(self, na_iter):
+        groups_dict = {}
+        for na in na_iter:
+            group = self._urpmi.get_package(na).latest.group
+            count = groups_dict.get(group)
+            if count is None:
+                groups_dict[group] = 1
+            else:
+                groups_dict[group] += 1
+        return groups_dict
+
+    def __getattr__(self, name):
+        """Look for filter calls (self.filter_NAME) or ignore."""
+        prefix, filter_name = name.split('_', 1)
+        if prefix == 'filter' and filter_name in self.filter_names:
+            def set_filter(matches, exclude):
+                self._set_filter(filter_name, matches, exclude)
+                self._sort_and_filter()
+            return set_filter
+        raise AttributeError, "'%s' object has no attribute '%s'" \
+                              % (self.__class__.__name__, name)
+
+    def _set_filter(self, name, matches, exclude):
+        filter = self._filters.pop(name, {})
+        if matches:
+            filter[exclude] = set(matches)
         else:
-            return self.latest_installed
+            filter.pop(exclude, None)
+        if filter:
+            self._filters[name] = filter
 
-    def has_version(self, vr):
-        return vr not in self.installs \
-               or vr not in self.upgrades \
-               or vr not in self.downgrades
+    def _sort_and_filter(self):
+        """Sort and filter the key list."""
+        self._names = []
+        for na in self._items:
+            if self._filter(na):
+                self._names.append(na)
+        self._names.sort(key=lambda na: self._items[na]['sort_key'],
+                         reverse=self._reverse)
 
-    def __contains__(self, item):
-        return self.has_version(item)
+    def _filter(self, na):
+        for filter_name, sets in self._filters.iteritems():
+            for exclude in sets:
+                matches = self._filters[filter_name][exclude]
+                match_func = getattr(self,
+                                     '_%s_match_func' % filter_name)
+                if not exclude ^ match_func(na, matches):
+                    return False
+        return True
 
-    def __repr__(self):
-        return '%s(%s:%s)' % (self.__class__.__name__,
-                              self.name,
-                              id(self))
+    def _name_match_func(self, na, matches):
+        for name in matches:
+            if self._urpmi.get_package(na).name.startswith(name):
+                return True
+        return False
 
-class UrpmiPackage(object):
-    """A package in the rpm/urpmi database."""
+    def _status_match_func(self, na, matches):
+        return self._urpmi.get_package(na).status in matches
 
-    def __init__(self, data):
-        self.name = data['name']
-        self.version = data['version']
-        self.release = data['release']
-        self.arch = data['arch']
-        self.epoch = data['epoch']
-        self.size = int(data['size'])
-        self.group = data['group']
-        self.summary = data['summary']
-        self.media = data.get('media', '')
-        self.installtime = data.get('installtime')
-        self.disttag = data.get('disttag')
-        self.distepoch = data.get('distepoch')
-        # FIXME Currently installed packages won't come with
-        #       capabilities information:
-        self.requires = data.get('requires', [])
-        self.provides = data.get('provides', [])
-        self.conflict = data.get('conflict', [])
-        self.obsoletes = data.get('obsoletes', [])
+    def _group_match_func(self, na, matches):
+        folders = self._urpmi.get_package(na).latest.group.split('/')
+        for i in range(1, len(folders) + 1):
+            if '/'.join(folders[:i]) in matches:
+                return True
+        return False
 
-    @property
-    def installed(self):
-        """True if rpm is installed."""
-        return self.installtime != 0
+    def _media_match_func(self, na, matches):
+        return self._urpmi.get_package(na) in matches
 
-    @property
-    def vr(self):
-        """Package Version-Release: identifies a specific package
-        version.
-        """
-        return (self.version, self.release)
+    def _action_match_func(self, na, matches):
+        return self._items[na]['action'] in matches
 
-    @property
-    def nvra(self):
-        """Package Name-Version-Release-Arch: identifies uniquely the
-        package.
-        """
-        return (self.name, self.version, self.release, self.arch)
+    #
+    # Signal callbacks
+    #
 
-    def __eq__(self, other):
-        return self.nvra == other.nvra
+    def _on_deleted(self, pkgname):
+        self._keys.remove((self._get_sort_key(entry),
+                           pkgname.na))
+        del self._names[pkgname.na]
+        self.emit('package-deleted', pkgname.na)
 
-    def __ne__(self, other):
-        return not self.__eq__(other)
+    def _on_installed_version(self, pkgname, evrd):
+        print 'installed-version: %s: %s' % (pkgname, evrd)
 
-    def __le__(self, other):
-        if self == other:
-            return True
-        else:
-            return NotImplemented
+    def _on_removed_version(self, pkgname, evrd):
+        print 'remove-version: %s: %s' % (pkgname, evrd)
 
-    def __ge__(self, other):
-        return self.__le__(other)
-
-    def __cmp__(self, other):
-        if self.name != other.name:
-            raise ValueError('Name mismatch %s != %s'
-                             % (self.name, other.name))
-        levr = '%s:%s-%s' % (self.epoch, self.version, self.release)
-        if self.distepoch:
-            levr += ':' + self.distepoch
-        revr = '%s:%s-%s' % (other.epoch, other.version, other.release)
-        if other.distepoch:
-            revr += ":" + other.distepoch
-        return rpm.evrCompare(levr, revr);
-
-    def __str__(self):
-        return '%s-%s-%s.%s' % self.nvra
-
-    def __repr__(self):
-        return '%s(%s:%s)' % (self.__class__.__name__,
-                              self,
-                              self.epoch)
+    def _on_new_version(self, pkgname, evrd):
+        print 'new-version: %s: %s' % (pkgname, evrd)

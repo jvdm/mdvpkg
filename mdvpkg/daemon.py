@@ -31,6 +31,7 @@ import dbus.mainloop.glib
 import dbus.service
 import gobject
 import signal 
+import uuid
 
 import mdvpkg
 import mdvpkg.urpmi.db
@@ -68,8 +69,12 @@ class MdvPkgDaemon(dbus.service.Object):
                          mdvpkg.DBUS_SERVICE)
             sys.exit(1)
         dbus.service.Object.__init__(self, bus_name, mdvpkg.DBUS_PATH)
+
         self.urpmi = mdvpkg.urpmi.db.UrpmiDB()
+        self.urpmi.configure_medias()
+        self.urpmi.load_packages()
         self.runner = mdvpkg.worker.Runner(self.urpmi, backend_path)
+
         log.info('Daemon is ready')
 
     def run(self):
@@ -78,14 +83,30 @@ class MdvPkgDaemon(dbus.service.Object):
         except KeyboardInterrupt:
             self.Quit(None)
 
+    @dbus.service.signal(dbus_interface=mdvpkg.DBUS_TASK_INTERFACE,
+                         signature='sbb')
+    def Media(self, media_name, update, ignore):
+        """A media found during media listing."""
+        log.debug('Media(%s, %s, %s)', media_name, update, ignore)
+
+    @dbus.service.method(mdvpkg.DBUS_INTERFACE,
+                         in_signature='',
+                         out_signature='o',
+                         sender_keyword='sender')
+    def GetList(self, sender):
+        log.info('GetList() called')
+        list = DBusPackageList(self.urpmi, sender, self.bus)
+        return list.path
+
     @dbus.service.method(mdvpkg.DBUS_INTERFACE,
                          in_signature='',
                          out_signature='o',
                          sender_keyword='sender')
     def ListMedias(self, sender):
+        """List configured active medias."""
         log.info('ListMedias() called')
-        return self._create_task(mdvpkg.tasks.ListMediasTask,
-                                 sender)
+        for media in self.urpmi.list_active_medias():
+            self.Media(media.name, media.update, media.ignore)
         
     @dbus.service.method(mdvpkg.DBUS_INTERFACE,
                          in_signature='',
@@ -143,6 +164,105 @@ class MdvPkgDaemon(dbus.service.Object):
     def _quit_handler(self, signum, frame):
         """Handler for quiting signals."""
         self.Quit(None)
+
+
+class DBusPackageList(dbus.service.Object):
+    """DBus interface representing a PackageList."""
+
+    def __init__(self, urpmi, sender, bus=None):
+        if bus is None:
+            bus = dbus.SystemBus()
+        self._bus = bus
+        self.path = "%s/%s" % (mdvpkg.DBUS_PACKAGE_LIST_PATH,
+                               uuid.uuid4().get_hex())
+        dbus.service.Object.__init__(
+            self,
+            dbus.service.BusName(mdvpkg.DBUS_PACKAGE_LIST_IFACE,
+                                 self._bus),
+            self.path
+        )
+        self._sender = sender
+        # Watch for sender (which is a unique name) changes:
+        self._sender_watch = self._bus.watch_name_owner(
+                                 self._sender,
+                                 self._sender_owner_changed
+                             )
+        self._list = mdvpkg.urpmi.db.PackageList(urpmi)
+
+    @dbus.service.method(mdvpkg.DBUS_PACKAGE_LIST_IFACE,
+                         in_signature='sb',
+                         out_signature='',
+                         sender_keyword='sender')
+    def Sort(self, key, reverse, sender):
+        log.debug('Sort(%s, %s) called', key, reverse)
+        self._check_owner(sender)
+        self._list.sort(key, reverse)
+
+    @dbus.service.method(mdvpkg.DBUS_PACKAGE_LIST_IFACE,
+                         in_signature='sasb',
+                         out_signature='',
+                         sender_keyword='sender')
+    def Filter(self, name, matches, exclude, sender):
+        log.debug('Filter(%s, %s, %s) called', attribute, matches, exclude)
+        self._check_owner(sender)
+        if name not in self._list.filter_names:
+            raise Exception, 'invalid filter name: %s' % name
+        getattr(self._list, 'filter_%s' % name)(matches, exclude)
+
+    @dbus.service.method(mdvpkg.DBUS_PACKAGE_LIST_IFACE,
+                         in_signature='uas',
+                         out_signature='',
+                         sender_keyword='sender')
+    def Get(self, index, attributes, sender):
+        log.debug('Get(%s, %s)', index, attributes)
+        self._check_owner(sender)
+        pkg_info = self._list.get(index)
+        details = {}
+        for attr in attributes:
+            details[attr] = getattr(pkg_info['rpm'], attr)
+        self.Package(index, pkg_info['name'], pkg_info['arch'],
+                     pkg_info['status'], pkg_info['action'], details)
+
+    @dbus.service.method(mdvpkg.DBUS_TASK_INTERFACE,
+                         in_signature='',
+                         out_signature='',
+                         sender_keyword='sender')
+    def Delete(self, sender):
+        """Cancel and remove the task."""
+        log.debug('Delete(): %s', self.path)
+        self._check_owner(sender)
+        self.on_delete()
+
+    @dbus.service.signal(dbus_interface=mdvpkg.DBUS_PACKAGE_LIST_IFACE,
+                         signature='ussssa{sv}')
+    def Package(self, index, name, arch, status, action, details):
+        log.debug('Package(%s, %s, %s, %s, %s) called',
+                  index, name, arch, status, action)
+
+    def on_delete(self):
+        """List must be deleted."""
+        self._sender_watch.cancel()
+        self.remove_from_connection()
+        log.info('package list deleted: %s', self.path)
+
+    def _check_owner(self, sender):
+        """Check if the sender is the list owner, the one who created
+        it.
+        """
+        if self._sender != sender:
+            log.info('attempt method call from different sender: %s',
+                     sender)
+            raise mdvpkg.exceptions.NotOwner()
+
+    def _sender_owner_changed(self, connection):
+        """Called when the sender owner changes."""
+        # Since we are watching a unique name this will be only called
+        # when the name is acquired and when the name is released; the
+        # latter will have connection == None:
+        if not connection:
+            log.info('task sender disconnected: %s', self.path)
+            # mimic the sender deleting the list:
+            self.Delete(self._sender)
 
 
 def run():
