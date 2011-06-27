@@ -190,6 +190,15 @@ class DBusPackageList(dbus.service.Object):
         self._list = mdvpkg.urpmi.db.PackageList(urpmi)
 
     @dbus.service.method(mdvpkg.DBUS_PACKAGE_LIST_IFACE,
+                         in_signature='',
+                         out_signature='u',
+                         sender_keyword='sender')
+    def Size(self, sender):
+        log.debug('Size() called', reverse)
+        self._check_owner(sender)
+        return len(self._list)
+
+    @dbus.service.method(mdvpkg.DBUS_PACKAGE_LIST_IFACE,
                          in_signature='sb',
                          out_signature='',
                          sender_keyword='sender')
@@ -203,7 +212,7 @@ class DBusPackageList(dbus.service.Object):
                          out_signature='',
                          sender_keyword='sender')
     def Filter(self, name, matches, exclude, sender):
-        log.debug('Filter(%s, %s, %s) called', attribute, matches, exclude)
+        log.debug('Filter(%s, %s, %s) called', name, matches, exclude)
         self._check_owner(sender)
         if name not in self._list.filter_names:
             raise Exception, 'invalid filter name: %s' % name
@@ -223,6 +232,26 @@ class DBusPackageList(dbus.service.Object):
         self.Package(index, pkg_info['name'], pkg_info['arch'],
                      pkg_info['status'], pkg_info['action'], details)
 
+    @dbus.service.method(mdvpkg.DBUS_PACKAGE_LIST_IFACE,
+                         in_signature='',
+                         out_signature='',
+                         sender_keyword='sender')
+    def GetGroups(self, sender):
+        log.debug('GetGroups() called')
+        self._check_owner(sender)
+        for group, count in self._list.get_groups().iteritems():
+            self.Group(group, count)
+
+    @dbus.service.method(mdvpkg.DBUS_PACKAGE_LIST_IFACE,
+                         in_signature='',
+                         out_signature='',
+                         sender_keyword='sender')
+    def GetAllGroups(self, sender):
+        log.debug('GetAllGroups() called')
+        self._check_owner(sender)
+        for group, count in self._list.get_all_groups().iteritems():
+            self.Group(group, count)
+
     @dbus.service.method(mdvpkg.DBUS_TASK_INTERFACE,
                          in_signature='',
                          out_signature='',
@@ -233,11 +262,20 @@ class DBusPackageList(dbus.service.Object):
         self._check_owner(sender)
         self.on_delete()
 
+    #
+    # DBus signals
+    #
+
     @dbus.service.signal(dbus_interface=mdvpkg.DBUS_PACKAGE_LIST_IFACE,
                          signature='ussssa{sv}')
     def Package(self, index, name, arch, status, action, details):
         log.debug('Package(%s, %s, %s, %s, %s) called',
                   index, name, arch, status, action)
+
+    @dbus.service.signal(dbus_interface=mdvpkg.DBUS_TASK_INTERFACE,
+                         signature='su')
+    def Group(self, group, count):
+        log.debug('Group(%s, %s)', group, count)
 
     def on_delete(self):
         """List must be deleted."""

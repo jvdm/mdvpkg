@@ -296,6 +296,12 @@ class PackageList(gobject.GObject):
         # urpmi transaction to perform actions ...
         self._transaction = None
 
+    def __len__(self):
+        return len(self._name)
+
+    def __getitem__(self, index):
+        return self.get(index)
+
     def sort(self, key_name, reverse=False):
         """Sort the list of packages using key_name as key."""
         for na in self._items.iterkeys():
