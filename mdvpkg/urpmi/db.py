@@ -316,12 +316,12 @@ class PackageList(gobject.GObject):
         na = self._names[index]
         package = self._urpmi.get_package(na)
         item = self._items[na]
-        attrdict = {'status': package.status,
-                    'action': item['action'],
-                    'name': package.name,
-                    'arch': package.arch,
-                    'rpm': package.latest}
-        return attrdict   
+        return_dict = {'status': package.status,
+                       'action': item['action'],
+                       'name': package.name,
+                       'arch': package.arch,
+                       'rpm': package.latest}
+        return return_dict
 
     def install(self, index):
         """Select a package for installation and all it's dependencies."""

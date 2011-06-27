@@ -25,7 +25,6 @@ import rpm
 import gobject
 import logging
 import bisect
-from mdvpkg.utils import SortedSet
 
 
 log = logging.getLogger('mdvpkgd.urpmi')
@@ -48,7 +47,7 @@ class RpmEVRD(object):
                 self.version,
                 self.release,
                 self.distepoch).__hash__()
-        
+
     def __repr__(self):
         evr = '%s:%s-%s' % (self.epoch, self.version, self.release)
         if self.distepoch:
@@ -137,13 +136,6 @@ class RpmPackage(object):
         return '%s(%s:%s)' % (self.__class__.__name__,
                               self,
                               self.epoch)
-
-
-def create_types_list():
-    """Create a new types list."""
-    return {'installed': SortedSet(),
-            'upgrade': SortedSet(),
-            'downgrade': SortedSet()}
 
 
 class Package(gobject.GObject):
