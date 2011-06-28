@@ -24,14 +24,14 @@
 __author__  = "J. Victor Martins <jvdm@mandriva.com>"
 __version__ = "0.6.3"
 
-DBUS_SERVICE = 'org.mandrivalinux.MdvPkg'
-DBUS_INTERFACE = 'org.mandrivalinux.MdvPkg'
-DBUS_PATH = '/'
+SERVICE = 'org.mandrivalinux.MdvPkg'
+IFACE = 'org.mandrivalinux.MdvPkg'
+PATH = '/'
 
-DBUS_TASK_PATH = '%stask' % DBUS_PATH
-DBUS_TASK_INTERFACE = '%s.Task' % DBUS_INTERFACE
-DBUS_PACKAGE_LIST_PATH = '%spackage_list' % DBUS_PATH
-DBUS_PACKAGE_LIST_IFACE = '%s.PackageList' % DBUS_INTERFACE
+TASK_PATH = '%stask' % PATH
+TASK_IFACE = '%s.Task' % IFACE
+PACKAGE_LIST_PATH = '%spackage_list' % PATH
+PACKAGE_LIST_IFACE = '%s.PackageList' % IFACE
 
 ## Those are used in setup.py to configure installation paths ...
 MANDRIVA_DATA_DIR = '/usr/share/mandriva'

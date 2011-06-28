@@ -61,14 +61,14 @@ class MdvPkgDaemon(dbus.service.Object):
             backend_dir = mdvpkg.DEFAULT_BACKEND_DIR
         self._loop = gobject.MainLoop()
         try:
-            bus_name = dbus.service.BusName(mdvpkg.DBUS_SERVICE,
+            bus_name = dbus.service.BusName(mdvpkg.SERVICE,
                                             self.bus,
                                             do_not_queue=True)
         except dbus.exceptions.NameExistsException:
             log.critical('Someone is using %s service name...',
                          mdvpkg.DBUS_SERVICE)
             sys.exit(1)
-        dbus.service.Object.__init__(self, bus_name, mdvpkg.DBUS_PATH)
+        dbus.service.Object.__init__(self, bus_name, mdvpkg.PATH)
 
         self.urpmi = mdvpkg.urpmi.db.UrpmiDB(backend_dir=backend_dir)
         self.urpmi.configure_medias()
@@ -83,13 +83,13 @@ class MdvPkgDaemon(dbus.service.Object):
         except KeyboardInterrupt:
             self.Quit(None)
 
-    @dbus.service.signal(dbus_interface=mdvpkg.DBUS_TASK_INTERFACE,
+    @dbus.service.signal(dbus_interface=mdvpkg.IFACE,
                          signature='sbb')
     def Media(self, media_name, update, ignore):
         """A media found during media listing."""
         log.debug('Media(%s, %s, %s)', media_name, update, ignore)
 
-    @dbus.service.method(mdvpkg.DBUS_INTERFACE,
+    @dbus.service.method(mdvpkg.IFACE,
                          in_signature='',
                          out_signature='o',
                          sender_keyword='sender')
@@ -98,7 +98,7 @@ class MdvPkgDaemon(dbus.service.Object):
         list = DBusPackageList(self.urpmi, sender, self.bus)
         return list.path
 
-    @dbus.service.method(mdvpkg.DBUS_INTERFACE,
+    @dbus.service.method(mdvpkg.IFACE,
                          in_signature='',
                          out_signature='o',
                          sender_keyword='sender')
@@ -108,7 +108,7 @@ class MdvPkgDaemon(dbus.service.Object):
         for media in self.urpmi.list_active_medias():
             self.Media(media.name, media.update, media.ignore)
         
-    @dbus.service.method(mdvpkg.DBUS_INTERFACE,
+    @dbus.service.method(mdvpkg.IFACE,
                          in_signature='',
                          out_signature='o',
                          sender_keyword='sender')
@@ -117,7 +117,7 @@ class MdvPkgDaemon(dbus.service.Object):
         return self._create_task(mdvpkg.tasks.ListGroupsTask,
                                  sender)
 
-    @dbus.service.method(mdvpkg.DBUS_INTERFACE,
+    @dbus.service.method(mdvpkg.IFACE,
                          in_signature='as',
                          out_signature='o',
                          sender_keyword='sender')
@@ -137,7 +137,7 @@ class MdvPkgDaemon(dbus.service.Object):
     #                              sender,
     #                              files)
 
-    @dbus.service.method(mdvpkg.DBUS_INTERFACE,
+    @dbus.service.method(mdvpkg.IFACE,
                          in_signature='as',
                          out_signature='o',
                          sender_keyword='sender')
@@ -147,7 +147,7 @@ class MdvPkgDaemon(dbus.service.Object):
                                  sender,
                                  names)
 
-    @dbus.service.method(mdvpkg.DBUS_INTERFACE,
+    @dbus.service.method(mdvpkg.IFACE,
                          in_signature='',
                          out_signature='',
                          sender_keyword='sender')
@@ -173,11 +173,11 @@ class DBusPackageList(dbus.service.Object):
         if bus is None:
             bus = dbus.SystemBus()
         self._bus = bus
-        self.path = "%s/%s" % (mdvpkg.DBUS_PACKAGE_LIST_PATH,
+        self.path = "%s/%s" % (mdvpkg.PACKAGE_LIST_PATH,
                                uuid.uuid4().get_hex())
         dbus.service.Object.__init__(
             self,
-            dbus.service.BusName(mdvpkg.DBUS_PACKAGE_LIST_IFACE,
+            dbus.service.BusName(mdvpkg.PACKAGE_LIST_IFACE,
                                  self._bus),
             self.path
         )
@@ -189,7 +189,7 @@ class DBusPackageList(dbus.service.Object):
                              )
         self._list = mdvpkg.urpmi.db.PackageList(urpmi)
 
-    @dbus.service.method(mdvpkg.DBUS_PACKAGE_LIST_IFACE,
+    @dbus.service.method(mdvpkg.PACKAGE_LIST_IFACE,
                          in_signature='',
                          out_signature='u',
                          sender_keyword='sender')
@@ -198,7 +198,7 @@ class DBusPackageList(dbus.service.Object):
         self._check_owner(sender)
         return len(self._list)
 
-    @dbus.service.method(mdvpkg.DBUS_PACKAGE_LIST_IFACE,
+    @dbus.service.method(mdvpkg.PACKAGE_LIST_IFACE,
                          in_signature='sb',
                          out_signature='',
                          sender_keyword='sender')
@@ -207,7 +207,7 @@ class DBusPackageList(dbus.service.Object):
         self._check_owner(sender)
         self._list.sort(key, reverse)
 
-    @dbus.service.method(mdvpkg.DBUS_PACKAGE_LIST_IFACE,
+    @dbus.service.method(mdvpkg.PACKAGE_LIST_IFACE,
                          in_signature='sasb',
                          out_signature='',
                          sender_keyword='sender')
@@ -218,7 +218,7 @@ class DBusPackageList(dbus.service.Object):
             raise Exception, 'invalid filter name: %s' % name
         getattr(self._list, 'filter_%s' % name)(matches, exclude)
 
-    @dbus.service.method(mdvpkg.DBUS_PACKAGE_LIST_IFACE,
+    @dbus.service.method(mdvpkg.PACKAGE_LIST_IFACE,
                          in_signature='uas',
                          out_signature='',
                          sender_keyword='sender')
@@ -232,7 +232,7 @@ class DBusPackageList(dbus.service.Object):
         self.Package(index, pkg_info['name'], pkg_info['arch'],
                      pkg_info['status'], pkg_info['action'], details)
 
-    @dbus.service.method(mdvpkg.DBUS_PACKAGE_LIST_IFACE,
+    @dbus.service.method(mdvpkg.PACKAGE_LIST_IFACE,
                          in_signature='',
                          out_signature='',
                          sender_keyword='sender')
@@ -242,7 +242,7 @@ class DBusPackageList(dbus.service.Object):
         for group, count in self._list.get_groups().iteritems():
             self.Group(group, count)
 
-    @dbus.service.method(mdvpkg.DBUS_PACKAGE_LIST_IFACE,
+    @dbus.service.method(mdvpkg.PACKAGE_LIST_IFACE,
                          in_signature='',
                          out_signature='',
                          sender_keyword='sender')
@@ -252,7 +252,7 @@ class DBusPackageList(dbus.service.Object):
         for group, count in self._list.get_all_groups().iteritems():
             self.Group(group, count)
 
-    @dbus.service.method(mdvpkg.DBUS_TASK_INTERFACE,
+    @dbus.service.method(mdvpkg.PACKAGE_LIST_IFACE,
                          in_signature='',
                          out_signature='',
                          sender_keyword='sender')
@@ -266,13 +266,13 @@ class DBusPackageList(dbus.service.Object):
     # DBus signals
     #
 
-    @dbus.service.signal(dbus_interface=mdvpkg.DBUS_PACKAGE_LIST_IFACE,
+    @dbus.service.signal(dbus_interface=mdvpkg.PACKAGE_LIST_IFACE,
                          signature='ussssa{sv}')
     def Package(self, index, name, arch, status, action, details):
         log.debug('Package(%s, %s, %s, %s, %s) called',
                   index, name, arch, status, action)
 
-    @dbus.service.signal(dbus_interface=mdvpkg.DBUS_TASK_INTERFACE,
+    @dbus.service.signal(dbus_interface=mdvpkg.PACKAGE_LIST_IFACE,
                          signature='su')
     def Group(self, group, count):
         log.debug('Group(%s, %s)', group, count)

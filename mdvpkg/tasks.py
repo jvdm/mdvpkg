@@ -139,7 +139,7 @@ class TaskBase(dbus.service.Object):
     # D-Bus methods
     #
 
-    @dbus.service.method(mdvpkg.DBUS_TASK_INTERFACE,
+    @dbus.service.method(mdvpkg.TASK_IFACE,
                          in_signature='',
                          out_signature='',
                          sender_keyword='sender')
@@ -150,7 +150,7 @@ class TaskBase(dbus.service.Object):
         self._check_if_has_run()
         self._runner.push(self)
 
-    @dbus.service.method(mdvpkg.DBUS_TASK_INTERFACE,
+    @dbus.service.method(mdvpkg.TASK_IFACE,
                          in_signature='',
                          out_signature='',
                          sender_keyword='sender')
@@ -170,13 +170,13 @@ class TaskBase(dbus.service.Object):
     # D-Bus signals
     #
 
-    @dbus.service.signal(dbus_interface=mdvpkg.DBUS_TASK_INTERFACE,
+    @dbus.service.signal(dbus_interface=mdvpkg.TASK_IFACE,
                          signature='s')
     def Finished(self, status):
         """Signals that the task has finished successfully."""
         log.debug('Finished(%s): %s', status, self.path)
 
-    @dbus.service.signal(dbus_interface=mdvpkg.DBUS_TASK_INTERFACE,
+    @dbus.service.signal(dbus_interface=mdvpkg.TASK_IFACE,
                          signature='ss')
     def Error(self, status, message):
         """Signals a task error during running."""
@@ -185,7 +185,7 @@ class TaskBase(dbus.service.Object):
                   message,
                   self.path)
 
-    @dbus.service.signal(dbus_interface=mdvpkg.DBUS_TASK_INTERFACE,
+    @dbus.service.signal(dbus_interface=mdvpkg.TASK_IFACE,
                          signature='s')
     def StateChanged(self, state):
         """Signals the task state has changed."""
@@ -257,7 +257,7 @@ class TaskBase(dbus.service.Object):
 class ListMediasTask(TaskBase):
     """List all available medias."""
 
-    @dbus.service.signal(dbus_interface=mdvpkg.DBUS_TASK_INTERFACE,
+    @dbus.service.signal(dbus_interface=mdvpkg.TASK_IFACE,
                          signature='sbb')
     def Media(self, media_name, update, ignore):
         log.debug('Media(%s, %s, %s)', media_name, update, ignore)
@@ -273,7 +273,7 @@ class ListMediasTask(TaskBase):
 class ListGroupsTask(TaskBase):
     """List all available groups."""
 
-    @dbus.service.signal(dbus_interface=mdvpkg.DBUS_TASK_INTERFACE,
+    @dbus.service.signal(dbus_interface=mdvpkg.TASK_IFACE,
                          signature='su')
     def Group(self, group, count):
         log.debug('Group(%s, %s)', group, count)
@@ -305,17 +305,17 @@ class ListPackagesTask(TaskBase):
         self._create_list = False
         self._package_list = []
 
-    @dbus.service.signal(dbus_interface=mdvpkg.DBUS_TASK_INTERFACE,
+    @dbus.service.signal(dbus_interface=mdvpkg.TASK_IFACE,
                          signature='ussaa{sv}aa{sv}')
     def Package(self, index, name, status, install_details, upgrade_details):
         log.debug('Package(%s, %s, %s)', index, name, status)
 
-    @dbus.service.signal(dbus_interface=mdvpkg.DBUS_TASK_INTERFACE,
+    @dbus.service.signal(dbus_interface=mdvpkg.TASK_IFACE,
                          signature='u')
     def Ready(self, list_size):
         log.debug('Ready(%s)', list_size)
 
-    @dbus.service.method(mdvpkg.DBUS_TASK_INTERFACE,
+    @dbus.service.method(mdvpkg.TASK_IFACE,
                          in_signature='asb',
                          out_signature='',
                          sender_keyword='sender')
@@ -325,7 +325,7 @@ class ListPackagesTask(TaskBase):
         self._check_if_has_run()
         self._append_or_create_filter('name', exclude, names)
 
-    @dbus.service.method(mdvpkg.DBUS_TASK_INTERFACE,
+    @dbus.service.method(mdvpkg.TASK_IFACE,
                          in_signature='asb',
                          out_signature='',
                          sender_keyword='sender')
@@ -335,7 +335,7 @@ class ListPackagesTask(TaskBase):
         self._check_if_has_run()
         self._append_or_create_filter('media', exclude, medias)
 
-    @dbus.service.method(mdvpkg.DBUS_TASK_INTERFACE,
+    @dbus.service.method(mdvpkg.TASK_IFACE,
                          in_signature='asb',
                          out_signature='',
                          sender_keyword='sender')
@@ -345,7 +345,7 @@ class ListPackagesTask(TaskBase):
         self._check_if_has_run()
         self._append_or_create_filter('group', exclude, groups)
 
-    @dbus.service.method(mdvpkg.DBUS_TASK_INTERFACE,
+    @dbus.service.method(mdvpkg.TASK_IFACE,
                          in_signature='b',
                          out_signature='',
                          sender_keyword='sender')
@@ -355,7 +355,7 @@ class ListPackagesTask(TaskBase):
         self._check_if_has_run()
         self._append_or_create_filter('status', exclude, {'upgrade'})
 
-    @dbus.service.method(mdvpkg.DBUS_TASK_INTERFACE,
+    @dbus.service.method(mdvpkg.TASK_IFACE,
                          in_signature='b',
                          out_signature='',
                          sender_keyword='sender')
@@ -365,7 +365,7 @@ class ListPackagesTask(TaskBase):
         self._check_if_has_run()
         self._append_or_create_filter('status', exclude, {'new'})
 
-    @dbus.service.method(mdvpkg.DBUS_TASK_INTERFACE,
+    @dbus.service.method(mdvpkg.TASK_IFACE,
                          in_signature='b',
                          out_signature='',
                          sender_keyword='sender')
@@ -375,7 +375,7 @@ class ListPackagesTask(TaskBase):
         self._check_if_has_run()
         self._append_or_create_filter('status', exclude, {'installed'})
 
-    @dbus.service.method(mdvpkg.DBUS_TASK_INTERFACE,
+    @dbus.service.method(mdvpkg.TASK_IFACE,
                          in_signature='uas',
                          out_signature='',
                          sender_keyword='sender')
@@ -392,7 +392,7 @@ class ListPackagesTask(TaskBase):
                            installs,
                            upgrades)
 
-    @dbus.service.method(mdvpkg.DBUS_TASK_INTERFACE,
+    @dbus.service.method(mdvpkg.TASK_IFACE,
                          in_signature='sb',
                          out_signature='',
                          sender_keyword='sender')
@@ -409,7 +409,7 @@ class ListPackagesTask(TaskBase):
             key_func = lambda data: getattr(data[0].latest, key)
         self._package_list.sort(key=key_func, reverse=reverse)
 
-    @dbus.service.method(mdvpkg.DBUS_TASK_INTERFACE,
+    @dbus.service.method(mdvpkg.TASK_IFACE,
                          in_signature='',
                          out_signature='',
                          sender_keyword='sender')
@@ -544,7 +544,7 @@ class ListPackagesTask(TaskBase):
 #         TaskBase.__init__(self, daemon, sender, runner)
 #         self.backend_kwargs['pattern'] = pattern
 #
-#     @dbus.service.signal(dbus_interface=mdvpkg.DBUS_TASK_INTERFACE,
+#     @dbus.service.signal(dbus_interface=mdvpkg.TASK_IFACE,
 #                          signature='ssssas')
 #     def PackageFiles(self, name, version, release, arch, files):
 #         log.debug('PackageFiles(%s, %s)', name, files)
@@ -572,48 +572,48 @@ class InstallPackagesTask(TaskBase):
         TaskBase.__init__(self, daemon, sender, runner)
         self.names = names
 
-    @dbus.service.signal(dbus_interface=mdvpkg.DBUS_TASK_INTERFACE,
+    @dbus.service.signal(dbus_interface=mdvpkg.TASK_IFACE,
                          signature='s')
     def PreparingStart(self, total):
         log.debug('PreparingStart(%s)', total)
 
-    @dbus.service.signal(dbus_interface=mdvpkg.DBUS_TASK_INTERFACE,
+    @dbus.service.signal(dbus_interface=mdvpkg.TASK_IFACE,
                          signature='ss')
     def Preparing(self, amount, total):
         log.debug('Preparing(%s, %s)', amount, total)
 
-    @dbus.service.signal(dbus_interface=mdvpkg.DBUS_TASK_INTERFACE,
+    @dbus.service.signal(dbus_interface=mdvpkg.TASK_IFACE,
                          signature='')
     def PreparingDone(self):
         log.debug('PreparingDone()')
 
-    @dbus.service.signal(dbus_interface=mdvpkg.DBUS_TASK_INTERFACE,
+    @dbus.service.signal(dbus_interface=mdvpkg.TASK_IFACE,
                          signature='s')
     def DownloadStart(self, name):
         log.debug('DownloadStart(%s)', name)
 
-    @dbus.service.signal(dbus_interface=mdvpkg.DBUS_TASK_INTERFACE,
+    @dbus.service.signal(dbus_interface=mdvpkg.TASK_IFACE,
                          signature='sssss')
     def Download(self, name, percent, total, eta, speed):
         log.debug('Download(%s, %s, %s, %s, %s)',
                   name, percent, total, eta, speed)
 
-    @dbus.service.signal(dbus_interface=mdvpkg.DBUS_TASK_INTERFACE,
+    @dbus.service.signal(dbus_interface=mdvpkg.TASK_IFACE,
                          signature='s')
     def DownloadDone(self, name):
         log.debug('DownloadDone(%s)', name)
 
-    @dbus.service.signal(dbus_interface=mdvpkg.DBUS_TASK_INTERFACE,
+    @dbus.service.signal(dbus_interface=mdvpkg.TASK_IFACE,
                          signature='ss')
     def DownloadError(self, name, message):
         log.debug('DownloadError(%s, %s)', name, message)
 
-    @dbus.service.signal(dbus_interface=mdvpkg.DBUS_TASK_INTERFACE,
+    @dbus.service.signal(dbus_interface=mdvpkg.TASK_IFACE,
                          signature='ss')
     def InstallStart(self, name, total):
         log.debug('InstallStart(%s, %s)', name, total)
 
-    @dbus.service.signal(dbus_interface=mdvpkg.DBUS_TASK_INTERFACE,
+    @dbus.service.signal(dbus_interface=mdvpkg.TASK_IFACE,
                          signature='sss')
     def Install(self, name, amount, total):
         log.debug('Install(%s, %s, %s)', name, amount, total)
