@@ -28,6 +28,7 @@ import os
 import signal
 import collections
 import logging
+import os.path
 
 import mdvpkg.tasks
 
@@ -42,8 +43,8 @@ class BackendError(Exception):
 class Backend(object):
     """Represents a urpmi backend process instance."""
 
-    def __init__(self, path):
-        self.path = path        
+    def __init__(self, dir):
+        self.path = os.path.join(dir, 'urpmi_backend.pl')
         self.proc = None
         self._task = None
         self._runner_gen = None
@@ -151,9 +152,9 @@ class Runner(object):
     """Queue and controls the `run()` co-routine method of mdvpkg
     tasks."""
 
-    def __init__(self, urpmi, backend_path):
+    def __init__(self, urpmi, backend_dir):
         self._urpmi = urpmi
-        self._backend = Backend(backend_path)
+        self._backend = Backend(backend_dir)
         self.queue = collections.OrderedDict()
         self.running = False
 

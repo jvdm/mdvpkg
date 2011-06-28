@@ -48,7 +48,7 @@ class MdvPkgDaemon(dbus.service.Object):
     """Represents the daemon, which provides the dbus interface (by
     default at the system bus)."""
 
-    def __init__(self, bus=None, backend_path=None):
+    def __init__(self, bus=None, backend_dir=None):
         log.info('Starting daemon')
 
         signal.signal(signal.SIGQUIT, self._quit_handler)
@@ -57,8 +57,8 @@ class MdvPkgDaemon(dbus.service.Object):
         if not bus:
             bus = dbus.SystemBus()
         self.bus = bus
-        if not backend_path:
-            backend_path = mdvpkg.DEFAULT_BACKEND_PATH
+        if not backend_dir:
+            backend_dir = mdvpkg.DEFAULT_BACKEND_DIR
         self._loop = gobject.MainLoop()
         try:
             bus_name = dbus.service.BusName(mdvpkg.DBUS_SERVICE,
@@ -70,10 +70,10 @@ class MdvPkgDaemon(dbus.service.Object):
             sys.exit(1)
         dbus.service.Object.__init__(self, bus_name, mdvpkg.DBUS_PATH)
 
-        self.urpmi = mdvpkg.urpmi.db.UrpmiDB()
+        self.urpmi = mdvpkg.urpmi.db.UrpmiDB(backend_dir=backend_dir)
         self.urpmi.configure_medias()
         self.urpmi.load_packages()
-        self.runner = mdvpkg.worker.Runner(self.urpmi, backend_path)
+        self.runner = mdvpkg.worker.Runner(self.urpmi, backend_dir)
 
         log.info('Daemon is ready')
 
@@ -194,7 +194,7 @@ class DBusPackageList(dbus.service.Object):
                          out_signature='u',
                          sender_keyword='sender')
     def Size(self, sender):
-        log.debug('Size() called', reverse)
+        log.debug('Size() called')
         self._check_owner(sender)
         return len(self._list)
 
@@ -340,11 +340,11 @@ def run():
                       action='store_true',
                       dest='debug',
                       help='Show debug messages and information.')
-    parser.add_option('-b', '--backend',
+    parser.add_option('-b', '--backend-dir',
                       default=False,
                       action='store',
-                      dest='backend',
-                      help='Path to the urpmi backend to use.')
+                      dest='backend_dir',
+                      help='Path to the urpmi backend directory.')
     opts, args = parser.parse_args()
 
     ## Setup daemon and run ...
@@ -357,7 +357,7 @@ def run():
     else:
         log.setLevel(logging.INFO)
 
-    d = MdvPkgDaemon(bus=bus, backend_path=opts.backend)
+    d = MdvPkgDaemon(bus=bus, backend_dir=opts.backend_dir)
     d.run()
 
 
