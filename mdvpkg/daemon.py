@@ -30,13 +30,14 @@ import dbus.exceptions
 import dbus.mainloop.glib
 import dbus.service
 import gobject
-import signal 
+import signal
 import uuid
 
 import mdvpkg
 import mdvpkg.urpmi.db
 import mdvpkg.tasks
 import mdvpkg.worker
+from mdvpkg.policykit import check_authorization
 
 
 log = logging.getLogger('mdvpkgd')
@@ -66,7 +67,7 @@ class MdvPkgDaemon(dbus.service.Object):
                                             do_not_queue=True)
         except dbus.exceptions.NameExistsException:
             log.critical('Someone is using %s service name...',
-                         mdvpkg.DBUS_SERVICE)
+                         mdvpkg.SERVICE)
             sys.exit(1)
         dbus.service.Object.__init__(self, bus_name, mdvpkg.PATH)
 
@@ -100,55 +101,6 @@ class MdvPkgDaemon(dbus.service.Object):
 
     @dbus.service.method(mdvpkg.IFACE,
                          in_signature='',
-                         out_signature='o',
-                         sender_keyword='sender')
-    def ListMedias(self, sender):
-        """List configured active medias."""
-        log.info('ListMedias() called')
-        for media in self.urpmi.list_active_medias():
-            self.Media(media.name, media.update, media.ignore)
-        
-    @dbus.service.method(mdvpkg.IFACE,
-                         in_signature='',
-                         out_signature='o',
-                         sender_keyword='sender')
-    def ListGroups(self, sender):
-        log.info('ListGroups() called')
-        return self._create_task(mdvpkg.tasks.ListGroupsTask,
-                                 sender)
-
-    @dbus.service.method(mdvpkg.IFACE,
-                         in_signature='as',
-                         out_signature='o',
-                         sender_keyword='sender')
-    def ListPackages(self, attributes, sender):
-        log.info('ListPackages() called')
-        return self._create_task(mdvpkg.tasks.ListPackagesTask,
-                                 sender,
-                                 attributes)
-
-    # @dbus.service.method(mdvpkg.DBUS_INTERFACE,
-    #                      in_signature='as',
-    #                      out_signature='o',
-    #                      sender_keyword='sender')
-    # def SearchFiles(self, files, sender):
-    #     log.info('SearchFiles() called: %s', files)
-    #     return self._create_task(mdvpkg.tasks.SearchFilesTask,
-    #                              sender,
-    #                              files)
-
-    @dbus.service.method(mdvpkg.IFACE,
-                         in_signature='as',
-                         out_signature='o',
-                         sender_keyword='sender')
-    def InstallPackages(self, names, sender):
-        log.info('InstallPackages() called')
-        return self._create_task(mdvpkg.tasks.InstallPackagesTask,
-                                 sender,
-                                 names)
-
-    @dbus.service.method(mdvpkg.IFACE,
-                         in_signature='',
                          out_signature='',
                          sender_keyword='sender')
     def Quit(self, sender):
@@ -177,7 +129,7 @@ class DBusPackageList(dbus.service.Object):
                                uuid.uuid4().get_hex())
         dbus.service.Object.__init__(
             self,
-            dbus.service.BusName(mdvpkg.PACKAGE_LIST_IFACE,
+            dbus.service.BusName(mdvpkg.SERVICE,
                                  self._bus),
             self.path
         )
@@ -261,6 +213,30 @@ class DBusPackageList(dbus.service.Object):
         log.debug('Delete(): %s', self.path)
         self._check_owner(sender)
         self.on_delete()
+
+    @dbus.service.method(mdvpkg.DBUS_PACKAGE_LIST_IFACE,
+                          in_signature='as',
+                          out_signature='s',
+                          sender_keyword='sender',
+                          connection_keyword='connection')
+    def RemovePackages(self, packages, sender, connection):
+	check_authorization(self._bus,
+                            sender,
+                            connection,
+                            'org.mandrivalinux.mdvpkg.auth_admin_keep')
+        raise NotImplementedError
+
+    @dbus.service.method(mdvpkg.DBUS_PACKAGE_LIST_IFACE,
+                           in_signature='as',
+                           out_signature='s',
+                           sender_keyword='sender',
+                           connection_keyword='connection')
+    def InstallPackages(self, packages, sender, connection):
+	check_authorization(self._bus,
+                            sender,
+                            connection,
+                            'org.mandrivalinux.mdvpkg.auth_admin_keep')
+        raise NotImplementedError
 
     #
     # DBus signals

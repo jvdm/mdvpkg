@@ -20,6 +20,7 @@
 ##
 ##
 ## Author(s): J. Victor Martins <jvdm@mandriva.com>
+##            Wiliam Souza <wiliam@mandriva.com>
 ##
 """Distutil setup call for mdvpkg."""
 
@@ -46,6 +47,7 @@ setup(
     data_files=[
         ('/etc/dbus-1/system.d/', glob('dbus/*.conf')),
         ('/usr/share/dbus-1/system-services/', glob('dbus/*.service')),
+        ('/usr/share/polkit-1/actions/', glob('policykit/*.policy')),
         (mdvpkg.DEFAULT_BACKEND_DIR, ['backend/urpmi_backend.pl',
                                       'backend/resolve.pl']),
     ],
