@@ -24,8 +24,10 @@
 import dbus
 import dbus.exceptions
 
+from mdvpkg.exceptions import AuthorizationFailed
 
-def check_authorization(bus, sender, connection, action):
+
+def check_authorization(sender, connection, action):
     """Check policykit authorization.
 
     @param sender:
@@ -45,6 +47,7 @@ def check_authorization(bus, sender, connection, action):
     )
 
     pid = dbus_interface.GetConnectionUnixProcessID(sender)
+    bus = dbus.SystemBus()
 
     policykit_proxy = bus.get_object(
         'org.freedesktop.PolicyKit1',
@@ -74,5 +77,4 @@ def check_authorization(bus, sender, connection, action):
                                 timeout=600
                             )
     if not is_auth:
-        msg = 'org.mandrivalinux.MdvPkg.Error.NotAuthorized'
-        raise dbus.exceptions.DBusException, msg
+        raise AuthorizationFailed

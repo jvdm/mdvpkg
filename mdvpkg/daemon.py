@@ -220,8 +220,7 @@ class DBusPackageList(dbus.service.Object):
                           sender_keyword='sender',
                           connection_keyword='connection')
     def RemovePackages(self, packages, sender, connection):
-	check_authorization(self._bus,
-                            sender,
+	check_authorization(sender,
                             connection,
                             'org.mandrivalinux.mdvpkg.auth_admin_keep')
         raise NotImplementedError
@@ -232,8 +231,7 @@ class DBusPackageList(dbus.service.Object):
                            sender_keyword='sender',
                            connection_keyword='connection')
     def InstallPackages(self, packages, sender, connection):
-	check_authorization(self._bus,
-                            sender,
+	check_authorization(sender,
                             connection,
                             'org.mandrivalinux.mdvpkg.auth_admin_keep')
         raise NotImplementedError

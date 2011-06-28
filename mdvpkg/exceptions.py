@@ -36,10 +36,12 @@ class MdvPkgError(dbus.DBusException):
 class TaskAlreadyRunning(MdvPkgError):
     """Raised if a class is tried to be runned twice."""
 
-
 class NotOwner(MdvPkgError):
     """Raised if a different sender tries to execute task methods."""
 
 class TaskBadState(MdvPkgError):
     """Raised if an attempt to call methods on a task is made and its
     state is invalid."""
+
+class AuthorizationFailed(MdvPkgError):
+    pass
