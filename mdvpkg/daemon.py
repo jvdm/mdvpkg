@@ -214,7 +214,7 @@ class DBusPackageList(dbus.service.Object):
         self._check_owner(sender)
         self.on_delete()
 
-    @dbus.service.method(mdvpkg.DBUS_PACKAGE_LIST_IFACE,
+    @dbus.service.method(mdvpkg.PACKAGE_LIST_IFACE,
                           in_signature='as',
                           out_signature='s',
                           sender_keyword='sender',
@@ -226,7 +226,7 @@ class DBusPackageList(dbus.service.Object):
                             'org.mandrivalinux.mdvpkg.auth_admin_keep')
         raise NotImplementedError
 
-    @dbus.service.method(mdvpkg.DBUS_PACKAGE_LIST_IFACE,
+    @dbus.service.method(mdvpkg.PACKAGE_LIST_IFACE,
                            in_signature='as',
                            out_signature='s',
                            sender_keyword='sender',
