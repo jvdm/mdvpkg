@@ -30,14 +30,14 @@ import dbus.exceptions
 import dbus.mainloop.glib
 import dbus.service
 import gobject
-import signal 
+import signal
 import uuid
 
 import mdvpkg
 import mdvpkg.urpmi.db
 import mdvpkg.tasks
 import mdvpkg.worker
-
+from mdvpkg.policykit import checkAuthorization
 
 log = logging.getLogger('mdvpkgd')
 # setup default dbus mainloop:
@@ -107,7 +107,7 @@ class MdvPkgDaemon(dbus.service.Object):
         log.info('ListMedias() called')
         for media in self.urpmi.list_active_medias():
             self.Media(media.name, media.update, media.ignore)
-        
+
     @dbus.service.method(mdvpkg.DBUS_INTERFACE,
                          in_signature='',
                          out_signature='o',
@@ -264,6 +264,24 @@ class DBusPackageList(dbus.service.Object):
             # mimic the sender deleting the list:
             self.Delete(self._sender)
 
+    @dbus.service.method(mdvpkg.DBUS_PACKAGE_LIST_IFACE,
+                          in_signature='as',
+                          out_signature='s',
+                          sender_keyword='sender',
+                          connection_keyword='connection')
+    def RemovePackages(self, packages, sender, connection):
+	checkAuthorization(sender, connection, 'org.mandrivalinux.mdvpkg.auth_admin_keep')
+	return dbus.String(u'Not implemented')
+
+
+    @dbus.service.method(mdvpkg.DBUS_PACKAGE_LIST_IFACE,
+                           in_signature='as',
+                           out_signature='s',
+                           sender_keyword='sender',
+                           connection_keyword='connection')
+    def InstallPackages(self, packages, sender, connection):
+	checkAuthorization(sender, connection, 'org.mandrivalinux.mdvpkg.auth_admin_keep')
+	return dbus.String(u'Not implemented')
 
 def run():
     """Run the mdvpkg daemon from command line."""
