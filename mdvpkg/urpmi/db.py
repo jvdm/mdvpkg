@@ -31,6 +31,7 @@ import gobject
 import logging
 import rpm
 import logging
+import os.path
 
 import mdvpkg
 from mdvpkg.urpmi.media import UrpmiMedia
@@ -142,7 +143,8 @@ class UrpmiDB(gobject.GObject):
 
         selected = {'action-install': [],
                     'action-auto-install': []}
-        backend = subprocess.Popen(self.backend_dir + '/resolve.pl',
+        backend = subprocess.Popen(os.path.join(self.backend_dir,
+                                                'resolve.pl'),
                                    shell=True,
                                    stdin=subprocess.PIPE,
                                    stdout=subprocess.PIPE)
@@ -297,7 +299,7 @@ class PackageList(gobject.GObject):
         self._transaction = None
 
     def __len__(self):
-        return len(self._name)
+        return len(self._names)
 
     def __getitem__(self, index):
         return self.get(index)
@@ -335,6 +337,7 @@ class PackageList(gobject.GObject):
                                  self._names[index]
                              ).iteritems():
             for na in names:
+                log.debug('action changed for %s: %s', na, action)
                 self._items[na]['action'] = action
 
     def auto_select(self):
