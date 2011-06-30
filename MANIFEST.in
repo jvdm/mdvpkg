@@ -3,5 +3,7 @@
 
 include TODO
 graft doc/
+graft dbus/
+graft policykit/
 include backend/urpmi_backend.pl
 include backend/resolve.pl
