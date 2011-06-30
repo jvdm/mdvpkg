@@ -34,6 +34,7 @@ import logging
 import os.path
 
 import mdvpkg
+import mdvpkg.urpmi.task
 from mdvpkg.urpmi.media import UrpmiMedia
 from mdvpkg.urpmi.packages import RpmPackage
 from mdvpkg.urpmi.packages import Package
@@ -78,6 +79,7 @@ class UrpmiDB(gobject.GObject):
         gobject.io_add_watch(wm.get_fd(),
                              gobject.IO_IN,
                              self._ino_in_callback)
+        self._runner = mdvpkg.urpmi.task.UrpmiRunner(backend_dir)
 
     def configure_medias(self):
         """Read configuration file, locate and populate the list of
@@ -166,12 +168,16 @@ class UrpmiDB(gobject.GObject):
         """
         raise NotImplementedError
 
-    def perform_install(self, nas):
-        bakcend = subprocess.Popen(self.backend_dir + '/install.pl',
-                                   stdin=subprocess.PIPE,
-                                   stdout=subprocess.PIPE)
-        rpms = filter(lambda na: self._cache[na].latest_upgrade, nas)
-        print rpms
+    def install(self, callback, names):
+        """Create task to install names, a list of (name, arch)
+        tuples.
+        """
+        names = ['%s' % self._cache[na].latest_upgrade for na in names]
+        task = mdvpkg.urpmi.task.create_task(callback,
+                                             mdvpkg.urpmi.task.ROLE_INSTALL,
+                                             names)
+        self._runner.push(task)
+        return task['id']
 
     def _load_installed_packages(self):
         """Visit rpmdb and load data from installed packages."""
@@ -340,29 +346,7 @@ class PackageList(gobject.GObject):
                 log.debug('action changed for %s: %s', na, action)
                 self._items[na]['action'] = action
 
-    def auto_select(self):
-        """Select all upgradable packages for installation."""
-        for action, names in self._urpmi.auto_select().iteritems():
-            for na in names:
-                self._items[na]['action'] = action
-
-    def resolve_dependecies(self):
-        """Check package actions and resolve dependencies to apply
-        them.
-        """
-        self._transaction = self._urpmi.create_transaction()
-        installs = filter(
-            lambda na: self._items[na]['action'] == 'ACTION_INSTALL',
-            self._items.itervalues()
-        )
-        for na in installs:
-            self._transaction.install(na)
-        self._transaction.resolve_dependencies()
-        for action, names in self._transaction.actions():
-            for na in names:
-                self._items[na]['action'] = action
-
-    def commit_actions(self):
+    def perform_actions(self, callback):
         """Process the selected actions and their dependencies.
         """
         installs = []
@@ -372,8 +356,10 @@ class PackageList(gobject.GObject):
                 installs.append(na)
             elif item['action'] == ACTION_REMOVE:
                 removes.append(na)
-        return self._urpmi.create_transaction(install=installs,
-                                              remove=removes)
+
+        # TODO Add method for removing packages ...
+
+        self._urpmi.install(callback, installs)
 
     def get_groups(self):
         """Return the dict of package groups and package count in

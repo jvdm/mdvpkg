@@ -33,12 +33,8 @@ use urpm::args qw();
 use urpm::select qw();
 use urpm::main_loop qw();
 
-use constant {
-    STATE_SOLVING => 'state-resolving',
-    STATE_DOWNLOADING => 'state-downloading',
-    STATE_INSTALLING => 'state-installing',
-    STATE_SEARCHING => 'state-searching',
-};
+use File::Basename qw(fileparse);
+
 
 $| = 1;
 
@@ -49,6 +45,7 @@ our $read_tasks = 1;
 $SIG{TERM} = sub {
     $read_tasks = 0;
 };
+
 
 MAIN: {
     # Initializing urpmi ...
@@ -67,7 +64,7 @@ MAIN: {
 	}
 	or do {
 	    chomp($@);
-	    task_exception($@);
+	    response('exception', $@);
 	};
     }
 }
@@ -76,67 +73,21 @@ MAIN: {
 # Backend responses
 #
 
-sub task_response {
-    my ($tag, @args) = @_;
-
-    my %value_converters = (
-	'bool' => sub {
-	    return $_[0] ? 'True' : 'False';
-	},
-	'str' => sub {
-	    $_[0] =~ s|'|\\'|g;
-	    return "'" . $_[0] . "'";
-	},
-	'int' => sub {
-	    $_[0] =~ /\d+/ or die "$_[0] is not a number\n";
-	    return $_[0];
-	},
-    );
-
-    my $args_str = '';
-    while (my $type = shift @args) {
-	$args_str .= $value_converters{$type}->(shift @args) . ', ';
-    }
-
-    printf("\n%s\t%s\t(%s)\n", '%MDVPKG', $tag, $args_str);
-}
-
-sub task_signal {
-    my ($signal_name, @args) = @_;
-    task_response('SIGNAL', str => $signal_name, @args);
-}
-
-sub task_state_changed {
-    my ($state) = @_;
-    task_signal('StateChanged', str => $state);
-}
-
-sub task_exception {
-    my ($message) = @_;
-    task_response('EXCEPTION', str => $message);
-}
-
-sub task_error {
-    my ($code, $message) = @_;
-    task_response('ERROR', str => $code, str => $message);
-}
-
-sub task_done {
-    task_response('DONE');
+sub response {
+    printf("<mdvpkg> %s\t\n", join("\t", @_));
 }
 
 #
 # Task Handlers
 #
 
-sub on_task__install_packages {
+sub on_task__install {
     my ($urpm, @names) = @_;
 
     @names or die "Missing package names to install\n";
 
-    ## Search packages by name, getting their id ...
-
-    task_state_changed(STATE_SEARCHING);
+    # Search packages by name, getting their id ...
+    response('state', 'searching');
     my %packages;
     urpm::select::search_packages(
 	$urpm, 
@@ -144,17 +95,13 @@ sub on_task__install_packages {
 	\@names, 
     );
 
-    ## Lock urpmi and rpm databases ...
-
-    # Here we lock urpmi & rpm databases
-    # In third argument we can specified if the script must wait until urpmi or rpm
-    # databases are locked
+    # Lock urpmi and rpm databases, in third argument we can specified
+    # if the script must wait until urpmi or rpm databases are locked ...
     my $lock = urpm::lock::urpmi_db($urpm, undef, wait => 0);
     my $rpm_lock = urpm::lock::rpm_db($urpm, 'exclusive');
 
-    ## Resolve dependencies, get $state object ...
-
-    task_state_changed(STATE_SOLVING);
+    # Resolve dependencies, get $state object ...
+    response('state', 'resolving');
     my $state = {};
     my $restart;
     $restart = urpm::select::resolve_dependencies(
@@ -164,8 +111,7 @@ sub on_task__install_packages {
 	           auto_select => 0,
 	       );
 
-    # 4. Start urpm loop to download, remove and install packages ...
-
+    # Start urpm loop to download, remove and install packages ...
     my $exit_code;
     my $downloading = 0;
     $exit_code = urpm::main_loop::run(
@@ -176,97 +122,89 @@ sub on_task__install_packages {
 	\%packages,
 	{
 	    copy_removable => sub {
-		die "Removable media found: $_[0]\n";
+		die "removable media found: $_[0]\n";
 	    },
 	    trans_log => sub {
 		my ($mode, $urlfile, $percent, $total, $eta, $speed) = @_;
-
-		my (undef, $file) = split(/: /, $urlfile);
+		my ($rpm_name) = fileparse($urlfile, '.rpm');
 
 		if ($mode eq 'start') {
-		    $downloading or task_state_changed(STATE_DOWNLOADING);
-		    $downloading ||= 1;
-		    task_signal('DownloadStart', str => $file);
+		    response('callback', 'download_start',
+			     $rpm_name);
 		}
 		elsif ($mode eq 'progress') {
-		    task_signal('Download',
-				str => $file,
-				str => $percent,
-				str => $total,
-				str => $eta,
-				str => $speed);
+		    response('callback', 'download_progress',
+			     $rpm_name, $percent, $total, $eta, $speed);
 		}
 		elsif ($mode eq 'end') {
-		    task_signal('DownloadDone', str => $file);
+		    response('callback', 'download_end',
+			     $rpm_name);
 		}
 		elsif ($mode eq 'error') {
-		    # Error message is 3rd argument, saved in $percent
-		    task_signal('DownloadError',
-				str => $file,
-				str => $percent);
+		    # error message is 3rd argument:
+		    response('callback', 'download_error',
+			     $rpm_name, $percent);
 		}
 		else {
 		    die "trans_log callback with unknown mode: $mode\n";
 		}
 	    },
 	    bad_signature => sub {
-		    print 'pk_print_error(PK_ERROR_ENUM_GPG_FAILURE, "Bad or missing GPG signatures");', "\n";
-		    undef $lock;
-		    undef $rpm_lock;
-		    die;
+		response('callback', 'bad_signature');
+		undef $lock;
+		undef $rpm_lock;
+		die "bad signature\n";
 	    },
 	    trans_error_summary => sub {
-		die "Not implemented callback: trans_error_summary\n";
+		die "not implemented callback: trans_error_summary\n";
 	    },
 	    inst => sub {
 		my ($urpm, $type, $id, $subtype, $amount, $total) = @_;
 		my $pkg = $urpm->{depslist}[$id];
 		if ($subtype eq 'progress') {
-		    task_signal('Install',
-				str => scalar($pkg->fullname),
-				str => $amount,
-				str => $total);
+		    response('callback', 'install_progress',
+			     scalar $pkg->fullname, $amount, $total);
 		}
 		elsif ($subtype eq 'start') {
-		    task_signal('InstallStart',
-				str => scalar($pkg->fullname),
-				str => $total);
+		    response('callback', 'install_start',
+			     scalar $pkg->fullname, $total);
 		}
 	    },
 	    trans => sub {
 		my ($urpm, $type, $id, $subtype, $amount, $total) = @_;
 		if ($subtype eq 'progress') {
-		    task_signal('Preparing',
-				str => $amount,
-				str => $total);
+		    response('callback', 'trans_progress',
+			    $amount, $total);
 		}
 		elsif ($subtype eq 'stop') {
-		    task_signal('PreparingDone')
+		    response('callback', 'trans_stop')
 		}
 		elsif ($subtype eq 'start') {
-		    task_signal('PreparingStart', str => $total);
+		    response('callback', 'trans_start',
+			     $total);
 		}
 	    },
 	    ask_yes_or_no => sub {
-		# Return 1 = Return Yes
-		return 1;
+		response('callback', 'ask');
+		return <> =~ /|Y|y|Yes|yes|true|True|/;
 	    },
 	    need_restart => sub {
 		my ($need_restart_formatted) = @_;
 		print "$_\n" foreach values %$need_restart_formatted;
+		response('callback', 'nedd_restart');
 	    },
 	    completed => sub {
 		undef $lock;
 		undef $rpm_lock;
-		task_response('DONE');
+		response('done');
 	    },
 	    post_download => sub {
-		$downloading = 0;
-		task_state_changed(STATE_INSTALLING);
+		response('callback', 'post_download');
 	    },
 	    message => sub {
-		my ($_title, $msg) = @_; # graphical title
-		print $_title, $msg, "\n";
+		my ($title, $message) = @_;
+		response('callback', 'message',
+			 $title, $message);
 	    }
 	}
     );    
