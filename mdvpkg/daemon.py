@@ -209,32 +209,32 @@ class DBusPackageList(dbus.service.Object):
                          out_signature='',
                          sender_keyword='sender')
     def Delete(self, sender):
-        """Cancel and remove the task."""
+        """Cancel and remove the list from bus."""
         log.debug('Delete(): %s', self.path)
         self._check_owner(sender)
         self.on_delete()
-
-    @dbus.service.method(mdvpkg.PACKAGE_LIST_IFACE,
-                          in_signature='as',
-                          out_signature='s',
-                          sender_keyword='sender',
-                          connection_keyword='connection')
-    def RemovePackages(self, packages, sender, connection):
-	check_authorization(sender,
-                            connection,
-                            'org.mandrivalinux.mdvpkg.auth_admin_keep')
-        raise NotImplementedError
 
     @dbus.service.method(mdvpkg.PACKAGE_LIST_IFACE,
                            in_signature='as',
                            out_signature='s',
                            sender_keyword='sender',
                            connection_keyword='connection')
-    def InstallPackages(self, packages, sender, connection):
+    def Install(self, index, sender, connection):
+        """Mark a package and its dependencies for installation."""
+        log.debug('Install(%s) called', index)
+        self._list.install(index)
+
+    @dbus.service.method(mdvpkg.PACKAGE_LIST_IFACE,
+                         in_signature='',
+                         out_signature='o',
+                         sender_keyword='sender',
+                         connection_keyword='connection')
+    def ProcessActions(self, sender, connection):
 	check_authorization(sender,
                             connection,
                             'org.mandrivalinux.mdvpkg.auth_admin_keep')
         raise NotImplementedError
+        
 
     #
     # DBus signals
