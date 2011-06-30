@@ -3,3 +3,5 @@
 
 include TODO
 graft doc/
+include backend/urpmi_backend.pl
+include backend/resolve.pl
