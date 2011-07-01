@@ -178,9 +178,15 @@ class DBusPackageList(dbus.service.Object):
         log.debug('Get(%s, %s)', index, attributes)
         self._check_owner(sender)
         pkg_info = self._list.get(index)
+        for key in pkg_info.keys():
+            if pkg_infO[key] is None:
+                pkg_info[key] = ''
         details = {}
         for attr in attributes:
-            details[attr] = getattr(pkg_info['rpm'], attr)
+            value = getattr(pkg_info['rpm'], attr)
+            if value is None:
+                value = ''
+            details[attr] = value
         self.Package(index, pkg_info['name'], pkg_info['arch'],
                      pkg_info['status'], pkg_info['action'], details)
 
