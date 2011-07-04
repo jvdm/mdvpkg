@@ -199,6 +199,7 @@ class DBusPackageList(dbus.service.Object):
         self._check_owner(sender)
         for group, count in self._list.get_groups().iteritems():
             self.Group(group, count)
+        self.Ready()
 
     @dbus.service.method(mdvpkg.PACKAGE_LIST_IFACE,
                          in_signature='',
@@ -209,6 +210,7 @@ class DBusPackageList(dbus.service.Object):
         self._check_owner(sender)
         for group, count in self._list.get_all_groups().iteritems():
             self.Group(group, count)
+        self.Ready()
 
     @dbus.service.method(mdvpkg.PACKAGE_LIST_IFACE,
                          in_signature='',
@@ -241,7 +243,6 @@ class DBusPackageList(dbus.service.Object):
                             'org.mandrivalinux.mdvpkg.auth_admin_keep')
         raise NotImplementedError
         
-
     #
     # DBus signals
     #
@@ -256,6 +257,11 @@ class DBusPackageList(dbus.service.Object):
                          signature='su')
     def Group(self, group, count):
         log.debug('Group(%s, %s)', group, count)
+
+    @dbus.service.signal(dbus_interface=mdvpkg.PACKAGE_LIST_IFACE,
+                         signature='')
+    def Ready(self):
+        log.debug('Ready() called')
 
     def on_delete(self):
         """List must be deleted."""
