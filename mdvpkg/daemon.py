@@ -179,7 +179,7 @@ class DBusPackageList(dbus.service.Object):
         self._check_owner(sender)
         pkg_info = self._list.get(index)
         for key in pkg_info.keys():
-            if pkg_infO[key] is None:
+            if pkg_info[key] is None:
                 pkg_info[key] = ''
         details = {}
         for attr in attributes:
