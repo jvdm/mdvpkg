@@ -440,7 +440,7 @@ class PackageList(gobject.GObject):
         return False
 
     def _media_match_func(self, na, matches):
-        return self._urpmi.get_package(na) in matches
+        return self._urpmi.get_package(na).latest.media in matches
 
     def _action_match_func(self, na, matches):
         return self._items[na]['action'] in matches
