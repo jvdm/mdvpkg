@@ -160,15 +160,15 @@ class DBusPackageList(dbus.service.Object):
         self._list.sort(key, reverse)
 
     @dbus.service.method(mdvpkg.PACKAGE_LIST_IFACE,
-                         in_signature='sasb',
+                         in_signature='sasas',
                          out_signature='',
                          sender_keyword='sender')
-    def Filter(self, name, matches, exclude, sender):
-        log.debug('Filter(%s, %s, %s) called', name, matches, exclude)
+    def Filter(self, name, include, exclude, sender):
+        log.debug('Filter(%s) called', name)
         self._check_owner(sender)
         if name not in self._list.filter_names:
             raise Exception, 'invalid filter name: %s' % name
-        getattr(self._list, 'filter_%s' % name)(matches, exclude)
+        getattr(self._list, 'filter_%s' % name)(include, exclude)
 
     @dbus.service.method(mdvpkg.PACKAGE_LIST_IFACE,
                          in_signature='uas',

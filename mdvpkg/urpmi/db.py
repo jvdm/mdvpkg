@@ -388,19 +388,23 @@ class PackageList(gobject.GObject):
         """Look for filter calls (self.filter_NAME) or ignore."""
         prefix, filter_name = name.split('_', 1)
         if prefix == 'filter' and filter_name in self.filter_names:
-            def set_filter(matches, exclude):
-                self._set_filter(filter_name, matches, exclude)
+            def set_filter(include, exclude):
+                self._set_filter(filter_name, include, exclude)
                 self._sort_and_filter()
             return set_filter
         raise AttributeError, "'%s' object has no attribute '%s'" \
                               % (self.__class__.__name__, name)
 
-    def _set_filter(self, name, matches, exclude):
+    def _set_filter(self, name, include, exclude):
         filter = self._filters.pop(name, {})
-        if matches:
-            filter[exclude] = set(matches)
+        if include:
+            filter[False] = set(include)
         else:
-            filter.pop(exclude, None)
+            filter.pop(False, None)
+        if exclude:
+            filter[True] = set(exclude)
+        else:
+            filter.pop(True, None)
         if filter:
             self._filters[name] = filter
 
