@@ -43,7 +43,7 @@ from mdvpkg.urpmi.packages import Package
 log = logging.getLogger('mdvpkgd.urpmi')
 
 
-class UrpmiDB(gobject.GObject):
+class UrpmiDB(object):
     """Provide access to the urpmi database of medias and packages."""
 
     def __init__(self, 
@@ -52,7 +52,6 @@ class UrpmiDB(gobject.GObject):
                  conf_file='urpmi.cfg',
                  rpm_dbpath=None,
                  backend_dir=None):
-        gobject.GObject.__init__(self)
         self._conf_dir = os.path.abspath(conf_dir)
         self._data_dir = os.path.abspath(data_dir)
         self._conf_path = '%s/%s' % (self._conf_dir, conf_file)
@@ -271,11 +270,10 @@ ACTION_REMOVE = 'action-remove'
 ACTION_AUTO_REMOVE = 'action-auto-remove'
 
 
-class PackageList(gobject.GObject):
+class PackageList(object):
     """Represent the list of packages in the rpm/urpmi database."""
 
     def __init__(self, urpmi):
-        gobject.GObject.__init__(self)
         self._urpmi = urpmi
         self._items = {}
         self._names = []
@@ -283,19 +281,6 @@ class PackageList(gobject.GObject):
         self.filter_names = {'name', 'group','status', 'media', 'action'}
         for pkgname in self._urpmi.list_packages():
             self._items[pkgname.na] = {
-                'ids': {
-                    'deleted':
-                        pkgname.connect('deleted', self._on_deleted),
-                    'installed-version':
-                        pkgname.connect('installed-version',
-                                        self._on_installed_version),
-                    'removed-version':
-                        pkgname.connect('removed-version',
-                                        self._on_removed_version),
-                    'new-version':
-                        pkgname.connect('new-version',
-                                        self._on_new_version)
-                },
                 'action': ACTION_NO_ACTION,
                 'sort_key': None,
             }

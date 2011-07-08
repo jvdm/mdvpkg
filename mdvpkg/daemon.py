@@ -267,6 +267,7 @@ class DBusPackageList(dbus.service.Object):
         """List must be deleted."""
         self._sender_watch.cancel()
         self.remove_from_connection()
+        self._list = None
         log.info('package list deleted: %s', self.path)
 
     def _check_owner(self, sender):
