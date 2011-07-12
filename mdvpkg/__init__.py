@@ -22,7 +22,7 @@
 """Mandriva package daemon."""
 
 __author__  = "J. Victor Martins <jvdm@mandriva.com>"
-__version__ = "0.7.0"
+__version__ = "0.7.1"
 
 SERVICE = 'org.mandrivalinux.MdvPkg'
 IFACE = 'org.mandrivalinux.MdvPkg'
