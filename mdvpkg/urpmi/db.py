@@ -79,6 +79,24 @@ class UrpmiDB(object):
                              gobject.IO_IN,
                              self._ino_in_callback)
         self._runner = mdvpkg.urpmi.task.UrpmiRunner(backend_dir)
+        self._signals = {'download-start': [],
+                         'download-progress': [],
+                         'download-end': [],
+                         'install-start': [],
+                         'install-progress': [],
+                         'install-end': [],
+                         'remove-start': [],
+                         'remove-progress': [],
+                         'remove-end': []}
+
+    def emit(self, signal_name, *args, **kwargs):
+        """Emit a signal calling all callbacks."""
+        for callback in self._signals[signal_name]:
+            callback(*args, **kwargs)
+
+    def connect(self, signal_name, callback):
+        """Connect a callback to a signal."""
+        self._signals[signal_name].append(callback)
 
     def configure_medias(self):
         """Read configuration file, locate and populate the list of
@@ -288,6 +306,18 @@ class PackageList(object):
         self._reverse = False
         # urpmi transaction to perform actions ...
         self._transaction = None
+        # Connect urpmi signals ...
+        for signal, callback in \
+                {'download-start': self._on_download_start,
+                 'download-progress': self._on_download_progress,
+                 'download-end': self._on_download_end,
+                 'install-start': self._on_install_start,
+                 'install-progress': self._on_install_progress,
+                 'install-end': self._on_install_end,
+                 'remove-start': self._on_remove_start,
+                 'remove-progress': self._on_remove_progress,
+                 'remove-end': self._on_remove_end}.iteritems():
+            self._urpmi.connect(signal, callback)
 
     def __len__(self):
         return len(self._names)
@@ -438,17 +468,29 @@ class PackageList(object):
     # Signal callbacks
     #
 
-    def _on_deleted(self, pkgname):
-        self._keys.remove((self._get_sort_key(entry),
-                           pkgname.na))
-        del self._names[pkgname.na]
-        self.emit('package-deleted', pkgname.na)
+    def _on_download_start():
+        pass
 
-    def _on_installed_version(self, pkgname, evrd):
-        print 'installed-version: %s: %s' % (pkgname, evrd)
+    def _on_download_progress():
+        pass
 
-    def _on_removed_version(self, pkgname, evrd):
-        print 'remove-version: %s: %s' % (pkgname, evrd)
+    def _on_download_end():
+        pass
 
-    def _on_new_version(self, pkgname, evrd):
-        print 'new-version: %s: %s' % (pkgname, evrd)
+    def _on_install_start():
+        pass
+
+    def _on_install_progress():
+        pass
+
+    def _on_install_end():
+        pass
+
+    def _on_remove_start():
+        pass
+
+    def _on_remove_progress():
+        pass
+
+    def _on_remove_end():
+        pass

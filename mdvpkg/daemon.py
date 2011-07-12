@@ -118,7 +118,7 @@ class MdvPkgDaemon(dbus.service.Object):
         self.Quit(None)
 
 
-class DBusPackageList(dbus.service.Object):
+class DBusPackageList(mdvpkg.urpmi.db.PackageList, dbus.service.Object):
     """DBus interface representing a PackageList."""
 
     def __init__(self, urpmi, sender, bus=None):
@@ -133,13 +133,13 @@ class DBusPackageList(dbus.service.Object):
                                  self._bus),
             self.path
         )
+        mdvpkg.urpmi.db.PackageList.__init__(self, urpmi)
         self._sender = sender
         # Watch for sender (which is a unique name) changes:
         self._sender_watch = self._bus.watch_name_owner(
                                  self._sender,
                                  self._sender_owner_changed
                              )
-        self._list = mdvpkg.urpmi.db.PackageList(urpmi)
 
     @dbus.service.method(mdvpkg.PACKAGE_LIST_IFACE,
                          in_signature='',
@@ -148,7 +148,7 @@ class DBusPackageList(dbus.service.Object):
     def Size(self, sender):
         log.debug('Size() called')
         self._check_owner(sender)
-        return len(self._list)
+        return len(self)
 
     @dbus.service.method(mdvpkg.PACKAGE_LIST_IFACE,
                          in_signature='sb',
@@ -157,7 +157,7 @@ class DBusPackageList(dbus.service.Object):
     def Sort(self, key, reverse, sender):
         log.debug('Sort(%s, %s) called', key, reverse)
         self._check_owner(sender)
-        self._list.sort(key, reverse)
+        self.sort(key, reverse)
 
     @dbus.service.method(mdvpkg.PACKAGE_LIST_IFACE,
                          in_signature='sasas',
@@ -166,9 +166,9 @@ class DBusPackageList(dbus.service.Object):
     def Filter(self, name, include, exclude, sender):
         log.debug('Filter(%s) called', name)
         self._check_owner(sender)
-        if name not in self._list.filter_names:
+        if name not in self.filter_names:
             raise Exception, 'invalid filter name: %s' % name
-        getattr(self._list, 'filter_%s' % name)(include, exclude)
+        getattr(self, 'filter_%s' % name)(include, exclude)
 
     @dbus.service.method(mdvpkg.PACKAGE_LIST_IFACE,
                          in_signature='uas',
@@ -177,7 +177,7 @@ class DBusPackageList(dbus.service.Object):
     def Get(self, index, attributes, sender):
         log.debug('Get(%s, %s)', index, attributes)
         self._check_owner(sender)
-        pkg_info = self._list.get(index)
+        pkg_info = self.get(index)
         for key in pkg_info.keys():
             if pkg_info[key] is None:
                 pkg_info[key] = ''
@@ -197,7 +197,7 @@ class DBusPackageList(dbus.service.Object):
     def GetGroups(self, sender):
         log.debug('GetGroups() called')
         self._check_owner(sender)
-        for group, count in self._list.get_groups().iteritems():
+        for group, count in self.get_groups().iteritems():
             self.Group(group, count)
         self.Ready()
 
@@ -208,7 +208,7 @@ class DBusPackageList(dbus.service.Object):
     def GetAllGroups(self, sender):
         log.debug('GetAllGroups() called')
         self._check_owner(sender)
-        for group, count in self._list.get_all_groups().iteritems():
+        for group, count in self.get_all_groups().iteritems():
             self.Group(group, count)
         self.Ready()
 
@@ -230,7 +230,7 @@ class DBusPackageList(dbus.service.Object):
     def Install(self, index, sender, connection):
         """Mark a package and its dependencies for installation."""
         log.debug('Install(%s) called', index)
-        self._list.install(index)
+        self.install(index)
 
     @dbus.service.method(mdvpkg.PACKAGE_LIST_IFACE,
                          in_signature='',
@@ -267,7 +267,8 @@ class DBusPackageList(dbus.service.Object):
         """List must be deleted."""
         self._sender_watch.cancel()
         self.remove_from_connection()
-        self._list = None
+        # TODO Disconnect all signals, otherwise the reference will
+        #      persist.
         log.info('package list deleted: %s', self.path)
 
     def _check_owner(self, sender):
@@ -288,6 +289,37 @@ class DBusPackageList(dbus.service.Object):
             log.info('task sender disconnected: %s', self.path)
             # mimic the sender deleting the list:
             self.Delete(self._sender)
+
+    #
+    # Urpmi signal callbacks
+    #
+
+    def _on_download_start():
+        pass
+
+    def _on_download_progress():
+        pass
+
+    def _on_download_end():
+        pass
+
+    def _on_install_start():
+        pass
+
+    def _on_install_progress():
+        pass
+
+    def _on_install_end():
+        pass
+
+    def _on_remove_start():
+        pass
+
+    def _on_remove_progress():
+        pass
+
+    def _on_remove_end():
+        pass
 
 
 def run():
