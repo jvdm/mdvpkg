@@ -34,7 +34,8 @@ import signal
 import uuid
 
 import mdvpkg
-import mdvpkg.urpmi.db
+from mdvpkg.urpmi.db import UrpmiDB
+from mdvpkg.urpmi.db import PackageList
 import mdvpkg.tasks
 import mdvpkg.worker
 from mdvpkg.policykit import check_authorization
@@ -71,7 +72,7 @@ class MdvPkgDaemon(dbus.service.Object):
             sys.exit(1)
         dbus.service.Object.__init__(self, bus_name, mdvpkg.PATH)
 
-        self.urpmi = mdvpkg.urpmi.db.UrpmiDB(backend_dir=backend_dir)
+        self.urpmi = UrpmiDB(backend_dir=backend_dir)
         self.urpmi.configure_medias()
         self.urpmi.load_packages()
         self.runner = mdvpkg.worker.Runner(self.urpmi, backend_dir)
@@ -118,7 +119,7 @@ class MdvPkgDaemon(dbus.service.Object):
         self.Quit(None)
 
 
-class DBusPackageList(mdvpkg.urpmi.db.PackageList, dbus.service.Object):
+class DBusPackageList(PackageList, dbus.service.Object):
     """DBus interface representing a PackageList."""
 
     def __init__(self, urpmi, sender, bus=None):
@@ -133,7 +134,7 @@ class DBusPackageList(mdvpkg.urpmi.db.PackageList, dbus.service.Object):
                                  self._bus),
             self.path
         )
-        mdvpkg.urpmi.db.PackageList.__init__(self, urpmi)
+        PackageList.__init__(self, urpmi)
         self._sender = sender
         # Watch for sender (which is a unique name) changes:
         self._sender_watch = self._bus.watch_name_owner(
@@ -223,8 +224,8 @@ class DBusPackageList(mdvpkg.urpmi.db.PackageList, dbus.service.Object):
         self.on_delete()
 
     @dbus.service.method(mdvpkg.PACKAGE_LIST_IFACE,
-                           in_signature='as',
-                           out_signature='s',
+                           in_signature='u',
+                           out_signature='',
                            sender_keyword='sender',
                            connection_keyword='connection')
     def Install(self, index, sender, connection):
@@ -234,14 +235,14 @@ class DBusPackageList(mdvpkg.urpmi.db.PackageList, dbus.service.Object):
 
     @dbus.service.method(mdvpkg.PACKAGE_LIST_IFACE,
                          in_signature='',
-                         out_signature='o',
+                         out_signature='',
                          sender_keyword='sender',
                          connection_keyword='connection')
     def ProcessActions(self, sender, connection):
-	check_authorization(sender,
-                            connection,
-                            'org.mandrivalinux.mdvpkg.auth_admin_keep')
-        raise NotImplementedError
+	# check_authorization(sender,
+        #                     connection,
+        #                     'org.mandrivalinux.mdvpkg.auth_admin_keep')
+        self.process_actions()
         
     #
     # DBus signals
@@ -262,6 +263,36 @@ class DBusPackageList(mdvpkg.urpmi.db.PackageList, dbus.service.Object):
                          signature='')
     def Ready(self):
         log.debug('Ready() called')
+
+    @dbus.service.signal(dbus_interface=mdvpkg.PACKAGE_LIST_IFACE,
+                         signature='ss')
+    def Error(self, code, message):
+        log.debug('Error(%s, %s) called', code, message)
+
+    @dbus.service.signal(dbus_interface=mdvpkg.PACKAGE_LIST_IFACE,
+                         signature='u')
+    def DownloadStart(self, index):
+        log.debug('DownloadStart(%s) called', index)
+
+    @dbus.service.signal(dbus_interface=mdvpkg.PACKAGE_LIST_IFACE,
+                         signature='ussss')
+    def DownloadProgress(self, index, percent, total, eta, speed):
+        log.debug('DownloadStart(%s) called', index)
+
+    @dbus.service.signal(dbus_interface=mdvpkg.PACKAGE_LIST_IFACE,
+                         signature='s')
+    def Preparing(self, total):
+        log.debug('Preparing(%s) called', total)
+
+    @dbus.service.signal(dbus_interface=mdvpkg.PACKAGE_LIST_IFACE,
+                         signature='uss')
+    def InstallStart(self, index, total, count):
+        log.debug('DownloadStart(%s) called', index)
+
+    @dbus.service.signal(dbus_interface=mdvpkg.PACKAGE_LIST_IFACE,
+                         signature='uss')
+    def InstallProgress(self, index, amount, total):
+        log.debug('DownloadStart(%s) called', index)
 
     def on_delete(self):
         """List must be deleted."""
@@ -294,32 +325,44 @@ class DBusPackageList(mdvpkg.urpmi.db.PackageList, dbus.service.Object):
     # Urpmi signal callbacks
     #
 
-    def _on_download_start():
-        pass
+    def _on_download_start(self, package):
+        try:
+            index = self._names.index(package.na)
+        except ValueError:
+            pass
+        else:
+            self.DownloadStart(index)
 
-    def _on_download_progress():
-        pass
+    def _on_download_progress(self, package, percent, total, eta, speed):
+        try:
+            index = self._names.index(package.na)
+        except ValueError:
+            pass
+        else:
+            self.DownloadProgress(index, percent, total, eta, speed)
 
-    def _on_download_end():
-        pass
+    def _on_download_error(self, package, message):
+        self.Error('download-error', message)
 
-    def _on_install_start():
-        pass
+    def _on_install_start(self, package, total, count):
+        try:
+            index = self._names.index(package.na)
+        except ValueError:
+            pass
+        else:
+            self.InstallStart(index, total, count)
 
-    def _on_install_progress():
-        pass
+    def _on_install_progress(self, package, amount, total):
+        try:
+            index = self._names.index(package.na)
+        except ValueError:
+            pass
+        else:
+            self.InstallProgress(index, amount, total)
+        PackageList._on_install_progress(self, package, amount, total)
 
-    def _on_install_end():
-        pass
-
-    def _on_remove_start():
-        pass
-
-    def _on_remove_progress():
-        pass
-
-    def _on_remove_end():
-        pass
+    def _on_preparing(self, total):
+        self.Preparing(total)
 
 
 def run():

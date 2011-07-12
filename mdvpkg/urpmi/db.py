@@ -81,13 +81,10 @@ class UrpmiDB(object):
         self._runner = mdvpkg.urpmi.task.UrpmiRunner(backend_dir)
         self._signals = {'download-start': [],
                          'download-progress': [],
-                         'download-end': [],
+                         'download-error': [],
                          'install-start': [],
                          'install-progress': [],
-                         'install-end': [],
-                         'remove-start': [],
-                         'remove-progress': [],
-                         'remove-end': []}
+                         'preparing': []}
 
     def emit(self, signal_name, *args, **kwargs):
         """Emit a signal calling all callbacks."""
@@ -185,16 +182,28 @@ class UrpmiDB(object):
         """
         raise NotImplementedError
 
-    def install(self, callback, names):
+    def run_task(self, install=[], remove=[]):
         """Create task to install names, a list of (name, arch)
         tuples.
         """
-        names = ['%s' % self._cache[na].latest_upgrade for na in names]
-        task = mdvpkg.urpmi.task.create_task(callback,
-                                             mdvpkg.urpmi.task.ROLE_INSTALL,
-                                             names)
-        self._runner.push(task)
-        return task['id']
+        remove_names \
+            = ['%s' % self._cache[na].name for na in remove]
+        install_names \
+            = ['%s' % self._cache[na].latest_upgrade for na in install]
+        remove_task = mdvpkg.urpmi.task.create_task(
+                           self,
+                           mdvpkg.urpmi.task.ROLE_REMOVE,
+                           remove_names
+                      )
+        install_task = mdvpkg.urpmi.task.create_task(
+                           self,
+                           mdvpkg.urpmi.task.ROLE_INSTALL,
+                           install_names
+                       )
+        # self._runner.push(remove_task)
+        self._runner.push(self,
+                          mdvpkg.urpmi.task.ROLE_INSTALL,
+                          (install_names,))
 
     def _load_installed_packages(self):
         """Visit rpmdb and load data from installed packages."""
@@ -280,6 +289,44 @@ class UrpmiDB(object):
         self.ino_notifier.process_events()
         return True
 
+    def on_task_queued(self, task_id):
+        pass
+
+    def on_task_running(self, task_id):
+        pass
+
+    def on_task_done(self):
+        pass
+
+    def on_task_error(self, message):
+        log.debug('task error: %s', message)
+
+    def on_task_exception(self, message):
+        log.debug('task exception: %s', message)
+
+    def on_download_start(self, name, arch):
+        package = self._cache[(name, arch)]
+        self.emit('download-start', package)
+
+    def on_download_progress(self, name, arch, percent, total, eta, speed):
+        package = self._cache[(name, arch)]
+        self.emit('download-progress', package, percent, total, eta, speed)
+
+    def on_download_error(self, name, arch, message):
+        package = self._cache[(name, arch)]
+        self.emit('download-error', package, message)
+
+    def on_preparing(self, total):
+        self.emit('preparing', total)
+
+    def on_install_start(self, name, arch, total, count):
+        package = self._cache[(name, arch)]
+        self.emit('install-start', package, total, count)
+
+    def on_install_progress(self, name, arch, amount, total):
+        package = self._cache[(name, arch)]
+        self.emit('install-progress', package, amount, total)
+
 
 ACTION_NO_ACTION = 'action-no-action'
 ACTION_INSTALL = 'action-install'
@@ -310,13 +357,10 @@ class PackageList(object):
         for signal, callback in \
                 {'download-start': self._on_download_start,
                  'download-progress': self._on_download_progress,
-                 'download-end': self._on_download_end,
+                 'download-error': self._on_download_progress,
                  'install-start': self._on_install_start,
                  'install-progress': self._on_install_progress,
-                 'install-end': self._on_install_end,
-                 'remove-start': self._on_remove_start,
-                 'remove-progress': self._on_remove_progress,
-                 'remove-end': self._on_remove_end}.iteritems():
+                 'preparing': self._on_preparing}.iteritems():
             self._urpmi.connect(signal, callback)
 
     def __len__(self):
@@ -361,7 +405,7 @@ class PackageList(object):
                 log.debug('action changed for %s: %s', na, action)
                 self._items[na]['action'] = action
 
-    def perform_actions(self, callback):
+    def process_actions(self):
         """Process the selected actions and their dependencies.
         """
         installs = []
@@ -374,7 +418,7 @@ class PackageList(object):
 
         # TODO Add method for removing packages ...
 
-        self._urpmi.install(callback, installs)
+        self._urpmi.run_task(install=installs, remove=removes)
 
     def get_groups(self):
         """Return the dict of package groups and package count in
@@ -468,29 +512,21 @@ class PackageList(object):
     # Signal callbacks
     #
 
-    def _on_download_start():
+    def _on_download_start(self, package):
         pass
 
-    def _on_download_progress():
+    def _on_download_progress(self, package, percent, total, eta, speed):
         pass
 
-    def _on_download_end():
+    def _on_download_error(self, package, message):
         pass
 
-    def _on_install_start():
+    def _on_install_start(self, package, total, count):
         pass
 
-    def _on_install_progress():
-        pass
+    def _on_install_progress(self, package, amount, total):
+        if amount == total:
+            self._items[package.na]['action'] = ACTION_NO_ACTION
 
-    def _on_install_end():
-        pass
-
-    def _on_remove_start():
-        pass
-
-    def _on_remove_progress():
-        pass
-
-    def _on_remove_end():
+    def _on_preparing(self, total):
         pass

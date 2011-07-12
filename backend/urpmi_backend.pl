@@ -74,7 +74,7 @@ MAIN: {
 #
 
 sub response {
-    printf("<mdvpkg> %s\t\n", join("\t", @_));
+    printf("<mdvpkg> %s\n", join("\t", @_));
 }
 
 #
@@ -87,7 +87,6 @@ sub on_task__install {
     @names or die "Missing package names to install\n";
 
     # Search packages by name, getting their id ...
-    response('state', 'searching');
     my %packages;
     urpm::select::search_packages(
 	$urpm, 
@@ -101,7 +100,6 @@ sub on_task__install {
     my $rpm_lock = urpm::lock::rpm_db($urpm, 'exclusive');
 
     # Resolve dependencies, get $state object ...
-    response('state', 'resolving');
     my $state = {};
     my $restart;
     $restart = urpm::select::resolve_dependencies(
@@ -111,43 +109,58 @@ sub on_task__install {
 	           auto_select => 0,
 	       );
 
+    # Create map of selected rpm names to package ids:
+    my %pkg_map = ();
+    for my $pkg (@{$urpm->{depslist}}[keys %{ $state->{selected} }]) {
+	$pkg_map{$pkg->fullname} = $pkg
+    }
+
     # Start urpm loop to download, remove and install packages ...
     my $exit_code;
-    my $downloading = 0;
+    my %task_info = (set => undef,
+                     progress => 0);
     $exit_code = urpm::main_loop::run(
-	$urpm,
-	$state,
-	undef,
-	undef, #\@ask_unselect,
-	\%packages,
-	{
-	    copy_removable => sub {
-		die "removable media found: $_[0]\n";
-	    },
-	    trans_log => sub {
-		my ($mode, $urlfile, $percent, $total, $eta, $speed) = @_;
-		my ($rpm_name) = fileparse($urlfile, '.rpm');
-
-		if ($mode eq 'start') {
-		    response('callback', 'download_start',
-			     $rpm_name);
-		}
-		elsif ($mode eq 'progress') {
+        $urpm,
+        $state,
+        undef,
+        undef, #\@ask_unselect,
+        \%packages,
+        {
+            copy_removable => sub {
+                die "removable media found: $_[0]\n";
+            },
+            trans_log => sub {
+                my ($mode, $urlfile, $percent, $total, $eta, $speed) = @_;
+                my $p = $pkg_map{fileparse($urlfile, '.rpm')};
+                my @na = ($p->name, $p->arch);
+                if ($mode eq 'start') {
+                    response('callback', 'download_start',
+                             @na);
+                }
+                elsif ($mode eq 'progress') {
 		    response('callback', 'download_progress',
-			     $rpm_name, $percent, $total, $eta, $speed);
+			     @na, $percent, $total, $eta, $speed);
 		}
 		elsif ($mode eq 'end') {
-		    response('callback', 'download_end',
-			     $rpm_name);
+		    response('callback', 'download_progress',
+			     @na, 100, 0, 0, 0);
 		}
 		elsif ($mode eq 'error') {
 		    # error message is 3rd argument:
 		    response('callback', 'download_error',
-			     $rpm_name, $percent);
+			     @na, $percent);
 		}
 		else {
 		    die "trans_log callback with unknown mode: $mode\n";
 		}
+	    },
+	    post_extract => sub {
+		my ($set,
+		    $transaction_sources,
+		    $transaction_sources_install) = @_;
+		print $set, "\n";
+		$task_info{set} = $set;
+		$task_info{progress} = 0;
 	    },
 	    bad_signature => sub {
 		response('callback', 'bad_signature');
@@ -163,25 +176,20 @@ sub on_task__install {
 		my $pkg = $urpm->{depslist}[$id];
 		if ($subtype eq 'progress') {
 		    response('callback', 'install_progress',
-			     scalar $pkg->fullname, $amount, $total);
+			     $pkg->name, $pkg->arch, $amount, $total);
 		}
 		elsif ($subtype eq 'start') {
+		    $task_info{progress} += 1;
 		    response('callback', 'install_start',
-			     scalar $pkg->fullname, $total);
+			     $pkg->name, $pkg->arch,
+			     $total,
+			     $task_info{progress});
 		}
 	    },
 	    trans => sub {
 		my ($urpm, $type, $id, $subtype, $amount, $total) = @_;
-		if ($subtype eq 'progress') {
-		    response('callback', 'trans_progress',
-			    $amount, $total);
-		}
-		elsif ($subtype eq 'stop') {
-		    response('callback', 'trans_stop')
-		}
-		elsif ($subtype eq 'start') {
-		    response('callback', 'trans_start',
-			     $total);
+		if ($subtype eq 'start') {
+		    response('callback', 'preparing', $total);
 		}
 	    },
 	    ask_yes_or_no => sub {
@@ -199,7 +207,8 @@ sub on_task__install {
 		response('done');
 	    },
 	    post_download => sub {
-		response('callback', 'post_download');
+		# TODO Look for a cancellation flag so further
+		#      installation won't go
 	    },
 	    message => sub {
 		my ($title, $message) = @_;

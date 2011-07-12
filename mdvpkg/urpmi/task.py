@@ -33,6 +33,7 @@ import subprocess
 log = logging.getLogger('mdvpkgd.urpmi.task')
 
 ROLE_INSTALL = 'role-install'
+ROLE_REMOVE = 'role-remove'
 
 STATE_QUEUED = 'state-queued'
 STATE_RUNNING = 'state-running'
@@ -54,7 +55,7 @@ class UrpmiRunner(object):
 
     def __init__(self, backend_dir):
         self._queue = collections.OrderedDict()
-        self._task = None  # None == not running any task
+        self._callback = None  # None == not running any task
         self._backend_path = os.path.join(backend_dir, 'urpmi_backend.pl')
         self._backend_proc = None
         self._role_handlers = {ROLE_INSTALL: self._handle_install}
@@ -103,39 +104,47 @@ class UrpmiRunner(object):
         self._backend_proc = None
         log.debug('backend killed')
 
-    def push(self, task):
-        """Add a task to the run queue."""
-        log.debug('task queued: %s', task['id'])
-        if self._task is None:
+    # def push(self, task):
+    #     """Add a task to the run queue."""
+    #     log.debug('task queued: %s', task['id'])
+    #     if self._task is None:
+    #         gobject.idle_add(self._run_next_task)
+    #     self._queue[task['id']] = task
+    #     task['callback'].run_state(STATE_QUEUED)
+    def push(self, callback, role, args):
+        task_id = uuid.uuid4()
+        log.debug('task queued: %s', task_id)
+        if self._callback is None:
             gobject.idle_add(self._run_next_task)
-        self._queue[task['id']] = task
-        task['callback'].run_state(STATE_QUEUED)
+        self._queue[task_id] = (callback, role, args)
+        callback.on_task_queued(task_id)
 
     def _run_next_task(self):
         """Get the next task in queue to run."""
-        self._task = None
+        self._callback = None
         try:
-            _, self._task = self._queue.popitem(last=False)
+            task_id, (self._callback, role, args) \
+                = self._queue.popitem(last=False)
         except KeyError:
             log.info('queue is empty, no more tasks to run')
         else:
-            self._task['callback'].run_state(STATE_RUNNING)
-            self._role_handlers[self._task['role']](self._task['args'])
+            self._callback.on_task_running(task_id)
+            self._role_handlers[role](*args)
 
     #
     # Role handlers ...
     #
 
-    def _handle_install(self, args):
-        args.insert(0, 'install')
-        self.backend.stdin.write('%s\n' % '\t'.join(args))
+    def _handle_install(self, names):
+        names.insert(0, 'install')
+        self.backend.stdin.write('%s\n' % '\t'.join(names))
 
     #
     # Backend I/O callbacks ...
     #
 
     def _backend_reply_callback(self, stdout, condition):
-        if self._task is not None:
+        if self._callback is not None:
             # readline() may block, but we're expecting backend
             # process to always emit data linewise, so if there is
             # data a line will come shortly:
@@ -143,24 +152,36 @@ class UrpmiRunner(object):
             if line.startswith('<mdvpkg> '):
                 _, line = line.split(' ', 1)
                 log.debug('backend response: %s', line)
-                response, line = line.rstrip('\n').split('\t', 1)
-                if response == 'callback':
-                    name, args = line.split('\t', 1)
-                    getattr(self._task['callback'], name)(args.split('\t'))
+                response = line.rstrip('\n').split('\t', 1)
+                if response[0] == 'callback':
+                    try:
+                        name, args = response[1].split('\t', 1)
+                        args = args.split('\t')
+                    except ValueError:
+                        name = response[1]
+                        args = ()
+                    cb_func = getattr(self._callback, 'on_%s' % name)
+                    cb_func(*args)
                 else:
                     try:
-                        handler = getattr(self, '_on_backend_%s' % response)
+                        handler = getattr(self,
+                                          '_on_backend_%s' % response[0])
+                        try:
+                            line = response[1].split('\t')
+                        except IndexError:
+                            line = ()
                     except AttributeError:
-                        line = "unknown handler for '%s'" % response
+                        line = ("unknown handler for '%s'" % response,)
                         handler = self._on_backend_exception
-                    else:
-                        handler(self._task['callback'], line)
+                    handler(self, *line)
+            else:
+                print line
         return True
 
     def _backend_error_callback(self, stdout, condition):
-        if self._task is not None:
-            self._task['callback'].backend_error('backend pipe error')
-            self._task = None
+        if self._callback is not None:
+            self._callback.backend_error('backend pipe error')
+            self._callback = None
         else:
             raise Exception, 'backend pipe error'
         self.kill_backend()
@@ -169,14 +190,14 @@ class UrpmiRunner(object):
     # Reply callbacks ...
     #
 
-    def _on_backend_done(self, callback, line):
-        callback.done()
+    def _on_backend_done(self, line):
+        self._callback.on_task_done()
         self._run_next_task()
 
-    def _on_backend_error(self, callback, line):
-        callback.error(line)
+    def _on_backend_error(self, line):
+        self._callback.on_task_error(line)
         self._run_next_task()
 
-    def _on_backend_exception(self, callback, line):
-        callback.exception(line)
+    def _on_backend_exception(self, line):
+        self._callback.on_task_exception(line)
         self._run_next_task()
