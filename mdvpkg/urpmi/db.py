@@ -78,7 +78,7 @@ class UrpmiDB(object):
         gobject.io_add_watch(wm.get_fd(),
                              gobject.IO_IN,
                              self._ino_in_callback)
-        self._runner = mdvpkg.urpmi.task.UrpmiRunner(backend_dir)
+        self._runner = mdvpkg.urpmi.task.UrpmiRunner(self.backend_dir)
         self._signals = {'download-start': [],
                          'download-progress': [],
                          'download-error': [],
