@@ -85,15 +85,26 @@ class UrpmiDB(object):
                          'install-start': [],
                          'install-progress': [],
                          'preparing': []}
+        self._signals_callbacks = {}
 
     def emit(self, signal_name, *args, **kwargs):
         """Emit a signal calling all callbacks."""
-        for callback in self._signals[signal_name]:
+        for handler in self._signals[signal_name]:
+            callback, _ = self._signals_callbacks[handler]
             callback(*args, **kwargs)
 
     def connect(self, signal_name, callback):
         """Connect a callback to a signal."""
-        self._signals[signal_name].append(callback)
+        conn_tuple = (callback, signal_name)
+        handler = hash(conn_tuple)
+        self._signals_callbacks[handler] = conn_tuple
+        self._signals[signal_name].append(handler)
+        return handler
+
+    def disconnect(self, handler_id):
+        """Disconnect a signal callback."""
+        _, s_name = self._signals_callbacks.pop(handler_id)
+        self._signals[s_name].remove(handler_id)
 
     def configure_medias(self):
         """Read configuration file, locate and populate the list of
