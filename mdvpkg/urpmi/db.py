@@ -355,16 +355,28 @@ class PackageList(object):
         self._names = []
         self._filters = {}
         self.filter_names = {'name', 'group','status', 'media', 'action'}
+        self._reverse = False
+        # urpmi transaction to perform actions ...
+        self._transaction = None
+        # Connect urpmi signals ...
+        self._handlers = []
+
+    def __len__(self):
+        return len(self._names)
+
+    def __getitem__(self, index):
+        return self.get(index)
+
+    def load(self):
+        """Initialize the list."""
+        # Load package data from urpmi ...
         for pkgname in self._urpmi.list_packages():
             self._items[pkgname.na] = {
                 'action': ACTION_NO_ACTION,
                 'sort_key': None,
             }
             self._names.append(pkgname.na)
-        self._reverse = False
-        # urpmi transaction to perform actions ...
-        self._transaction = None
-        # Connect urpmi signals ...
+        # Connect to urpmi db signals ...
         for signal, callback in \
                 {'download-start': self._on_download_start,
                  'download-progress': self._on_download_progress,
@@ -372,13 +384,22 @@ class PackageList(object):
                  'install-start': self._on_install_start,
                  'install-progress': self._on_install_progress,
                  'preparing': self._on_preparing}.iteritems():
-            self._urpmi.connect(signal, callback)
+            handler = self._urpmi.connect(signal, callback)
+            self._handlers.append(handler)
 
-    def __len__(self):
-        return len(self._names)
-
-    def __getitem__(self, index):
-        return self.get(index)
+    def delete(self):
+        """Clean up the list."""
+        self._names = []
+        self._items = {}
+        self._filters = {}
+        # Disconnect urpmi signals ...
+        while True:
+            try:
+                handler = self._handlers.pop(0)
+            except IndexError:
+                break
+            else:
+                self._urpmi.disconnect(handler)
 
     def sort(self, key_name, reverse=False):
         """Sort the list of packages using key_name as key."""

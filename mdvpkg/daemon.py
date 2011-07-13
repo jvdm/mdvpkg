@@ -141,6 +141,8 @@ class DBusPackageList(PackageList, dbus.service.Object):
                                  self._sender,
                                  self._sender_owner_changed
                              )
+        # Auto load packages ...
+        self.load()
 
     @dbus.service.method(mdvpkg.PACKAGE_LIST_IFACE,
                          in_signature='',
@@ -298,6 +300,7 @@ class DBusPackageList(PackageList, dbus.service.Object):
         """List must be deleted."""
         self._sender_watch.cancel()
         self.remove_from_connection()
+        self.delete()
         # TODO Disconnect all signals, otherwise the reference will
         #      persist.
         log.info('package list deleted: %s', self.path)
