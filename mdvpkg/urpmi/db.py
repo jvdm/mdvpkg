@@ -197,15 +197,19 @@ class UrpmiDB(object):
         """Create task to install names, a list of (name, arch)
         tuples.
         """
-        remove_names \
-            = ['%s' % self._cache[na].name for na in remove]
-        install_names \
-            = ['%s' % self._cache[na].latest_upgrade for na in install]
+        remove_names = []
+        for pkg in [self._cache[na] for na in remove]:
+            remove_names.append(pkg.name)
+            pkg.in_progress = True
         remove_task = mdvpkg.urpmi.task.create_task(
                            self,
                            mdvpkg.urpmi.task.ROLE_REMOVE,
                            remove_names
                       )
+        install_names = []
+        for pkg in [self._cache[na] for na in install]:
+            install_names.append('%s' % pkg.latest_upgrade)
+            pkg.in_progress = True
         install_task = mdvpkg.urpmi.task.create_task(
                            self,
                            mdvpkg.urpmi.task.ROLE_INSTALL,
@@ -333,6 +337,11 @@ class UrpmiDB(object):
     def on_install_start(self, name, arch, total, count):
         package = self._cache[(name, arch)]
         self.emit('install-start', package, total, count)
+
+    def on_install_end(self, name, arch, evrd):
+        package = self._cache[(name, arch)]
+        package.in_progress = False
+        package.on_install(eval(evrd))
 
     def on_install_progress(self, name, arch, amount, total):
         package = self._cache[(name, arch)]

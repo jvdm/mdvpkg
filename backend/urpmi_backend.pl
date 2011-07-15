@@ -177,6 +177,25 @@ sub on_task__install {
 		if ($subtype eq 'progress') {
 		    response('callback', 'install_progress',
 			     $pkg->name, $pkg->arch, $amount, $total);
+		    if ($amount ==  $total) {
+			my $evrd = sprintf(
+			    "{'epoch': %s," .
+			    " 'version': '%s'," .
+			    " 'release': '%s'",
+			    $pkg->epoch,
+			    $pkg->version,
+			    $pkg->release);
+			if ($pkg->distepoch) {
+			    $evrd .= sprintf(", 'distepoch': '%s'}",
+					     $pkg->distepoch);
+			}
+			else {
+			    $evrd .= '}'
+			}
+			response('callback', 'install_end',
+				 $pkg->name, $pkg->arch,
+				 $evrd);
+		    }
 		}
 		elsif ($subtype eq 'start') {
 		    $task_info{progress} += 1;

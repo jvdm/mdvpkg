@@ -178,6 +178,7 @@ class Package(gobject.GObject):
         self._types = {'installed': [],
                        'upgrade': [],
                        'downgrade': []}
+        self.in_progress = False
 
     @property
     def name(self):
@@ -190,6 +191,8 @@ class Package(gobject.GObject):
     @property
     def status(self):
         """Package entry status."""
+        if self.in_progress:
+            return 'in-progress'
         if self.has_installs:
             if self.has_upgrades:
                 return 'upgrade'
@@ -211,17 +214,17 @@ class Package(gobject.GObject):
     @property
     def installs(self):
         """List of installed rpms."""
-        return self._list_by_type('installed')
+        return [ver['rpm'] for ver in self._list_by_type('installed')]
 
     @property
     def upgrades(self):
         """List of upgrade rpms."""
-        return self._list_by_type('upgrade')
+        return [ver['rpm'] for ver in self._list_by_type('upgrade')]
 
     @property
     def downgrades(self):
         """List of downgrade rpms."""
-        return self._list_by_type('downgrade')
+        return [ver['rpm'] for ver in self._list_by_type('downgrade')]
 
     @property
     def latest_installed(self):
@@ -249,13 +252,7 @@ class Package(gobject.GObject):
             # is the most recent installed version ...
             version_dict = {'rpm': rpm}
             if rpm.installtime is not None:
-                if not self.has_installs or rpm > self.latest_installed:
-                    for updict in self._list_by_type('upgrade'):
-                        if updict['rpm'] < rpm:
-                            self._set_type(updict, 'downgrade')
-                    for updict in self._list_by_type('downgrade'):
-                        if updict['rpm'] > rpm:
-                            self._set_type(updict, 'upgrade')
+                self._set_latest_installed(rpm)
                 self._set_type(version_dict, 'installed')
             else:
                 self._set_type(version_dict, self._get_update_type(rpm))
@@ -318,9 +315,28 @@ class Package(gobject.GObject):
                     self._versions[evrd] = version_dict
                     self._types = other._types
 
+    def on_install(self, evrd):
+        """React to the installation event of a upgrade evrd."""
+        evrd = RpmEVRD(evrd)
+        version = self._versions.get(evrd)
+        if version is None:
+            raise ValueError, 'not version of %s: %s' % (self.na, evrd)
+        self._set_latest_installed(version['rpm'])
+        self._set_type(version, 'installed')
+
+    def _set_latest_installed(self, rpm):
+        if not self.has_installs or rpm > self.latest_installed:
+            for updict in self._list_by_type('upgrade'):
+                if updict['rpm'] < rpm:
+                    self._set_type(updict, 'downgrade')
+            for updict in self._list_by_type('downgrade'):
+                if updict['rpm'] > rpm:
+                    self._set_type(updict, 'upgrade')
+
     def _list_by_type(self, type):
-        """Return a list of packages of specified type."""
-        return map(lambda evrd: self._versions[evrd]['rpm'], self._types[type])
+        """Return a list of version dicts of specified type."""
+        return map(lambda evrd: self._versions[evrd],
+                   self._types[type])
 
     def _latest_by_type(self, type):
         """Return the latest package of specified type."""
