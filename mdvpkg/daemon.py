@@ -51,7 +51,7 @@ class MdvPkgDaemon(dbus.service.Object):
     default at the system bus)."""
 
     def __init__(self, bus=None, backend_dir=None):
-        log.info('Starting daemon')
+        log.info('starting daemon')
 
         signal.signal(signal.SIGQUIT, self._quit_handler)
         signal.signal(signal.SIGTERM, self._quit_handler)
@@ -67,7 +67,7 @@ class MdvPkgDaemon(dbus.service.Object):
                                             self.bus,
                                             do_not_queue=True)
         except dbus.exceptions.NameExistsException:
-            log.critical('Someone is using %s service name...',
+            log.critical('someone is using %s service name',
                          mdvpkg.SERVICE)
             sys.exit(1)
         dbus.service.Object.__init__(self, bus_name, mdvpkg.PATH)
@@ -77,7 +77,7 @@ class MdvPkgDaemon(dbus.service.Object):
         self.urpmi.load_packages()
         self.runner = mdvpkg.worker.Runner(self.urpmi, backend_dir)
 
-        log.info('Daemon is ready')
+        log.info('daemon is ready')
 
     def run(self):
         try:
@@ -106,8 +106,8 @@ class MdvPkgDaemon(dbus.service.Object):
                          sender_keyword='sender')
     def Quit(self, sender):
         """Request a shutdown of the service."""
-        log.info('Shutdown was requested')
-        log.debug('Quitting main loop...')
+        log.info('shutdown was requested')
+        log.debug('quitting main loop ...')
         self._loop.quit()
 
     def _create_task(self, task_class, sender, *args):
