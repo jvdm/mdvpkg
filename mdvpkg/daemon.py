@@ -85,11 +85,47 @@ class MdvPkgDaemon(dbus.service.Object):
         except KeyboardInterrupt:
             self.Quit(None)
 
+    #
+    # Media related signals
+    #
+
     @dbus.service.signal(dbus_interface=mdvpkg.IFACE,
                          signature='sbb')
     def Media(self, media_name, update, ignore):
         """A media found during media listing."""
         log.debug('Media(%s, %s, %s)', media_name, update, ignore)
+
+    #
+    # Task related signals
+    # 
+
+    @dbus.service.signal(dbus_interface=mdvpkg.IFACE,
+                         signature='s')
+    def TaskQueued(self, task_id):
+        """A task was created by some client."""
+        log.debug('NewTask(%s)', task_id)
+        
+    @dbus.service.signal(dbus_interface=mdvpkg.IFACE,
+                         signature='s')
+    def TaskRunning(self, task_id):
+        """A task was created by some client."""
+        log.debug('TaskRunning(%s)', task_id)
+
+    @dbus.service.signal(dbus_interface=mdvpkg.IFACE,
+                         signature='suu')
+    def TaskProgress(self, task_id, count, total):
+        """A task was created by some client."""
+        log.debug('TaskProgress(%s, %s, %s)', task_id, count, total)
+
+    @dbus.service.signal(dbus_interface=mdvpkg.IFACE,
+                         signature='ss')
+    def TaskStateChanged(self, task_id, state):
+        """A task was created by some client."""
+        log.debug('TaskStateChanged(%s, state)', task_id, state)
+
+    #
+    # Daemon methods
+    #
 
     @dbus.service.method(mdvpkg.IFACE,
                          in_signature='',
@@ -109,10 +145,6 @@ class MdvPkgDaemon(dbus.service.Object):
         log.info('shutdown was requested')
         log.debug('quitting main loop ...')
         self._loop.quit()
-
-    def _create_task(self, task_class, sender, *args):
-        task = task_class(self, sender, self.runner, *args)
-        return task.path
 
     def _quit_handler(self, signum, frame):
         """Handler for quiting signals."""
