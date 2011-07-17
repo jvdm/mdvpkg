@@ -55,7 +55,8 @@ class UrpmiRunner(object):
 
     def __init__(self, backend_dir):
         self._queue = collections.OrderedDict()
-        self._callback = None  # None == not running any task
+        # None if not running a task
+        self._task = None  # (task_id, callback, role, args)
         self._backend_path = os.path.join(backend_dir, 'urpmi_backend.pl')
         self._backend_proc = None
         self._role_handlers = {ROLE_INSTALL: self._handle_install}
@@ -104,31 +105,25 @@ class UrpmiRunner(object):
         self._backend_proc = None
         log.debug('backend killed')
 
-    # def push(self, task):
-    #     """Add a task to the run queue."""
-    #     log.debug('task queued: %s', task['id'])
-    #     if self._task is None:
-    #         gobject.idle_add(self._run_next_task)
-    #     self._queue[task['id']] = task
-    #     task['callback'].run_state(STATE_QUEUED)
     def push(self, callback, role, args):
-        task_id = uuid.uuid4()
+        task_id = uuid.uuid4().get_hex()
         log.debug('task queued: %s', task_id)
-        if self._callback is None:
+        if self._task is None:
             gobject.idle_add(self._run_next_task)
-        self._queue[task_id] = (callback, role, args)
+        self._queue[task_id] = (task_id, callback, role, args)
         callback.on_task_queued(task_id)
+        return task_id
 
     def _run_next_task(self):
         """Get the next task in queue to run."""
-        self._callback = None
+        self._task = None
         try:
-            task_id, (self._callback, role, args) \
-                = self._queue.popitem(last=False)
+            _, self._task = self._queue.popitem(last=False)
         except KeyError:
             log.info('queue is empty, no more tasks to run')
         else:
-            self._callback.on_task_running(task_id)
+            task_id, callback, role, args = self._task
+            callback.on_task_running(task_id)
             self._role_handlers[role](*args)
 
     #
@@ -144,12 +139,13 @@ class UrpmiRunner(object):
     #
 
     def _backend_reply_callback(self, stdout, condition):
-        if self._callback is not None:
+        if self._task is not None:
             # readline() may block, but we're expecting backend
             # process to always emit data linewise, so if there is
             # data a line will come shortly:
             line = stdout.readline()
             if line.startswith('<mdvpkg> '):
+                callback = self._task[1]
                 _, line = line.split(' ', 1)
                 log.debug('backend response: %s', line)
                 response = line.rstrip('\n').split('\t', 1)
@@ -160,7 +156,9 @@ class UrpmiRunner(object):
                     except ValueError:
                         name = response[1]
                         args = ()
-                    cb_func = getattr(self._callback, 'on_%s' % name)
+                    if name == 'task_progress':
+                        args.insert(0, self._task[0])
+                    cb_func = getattr(callback, 'on_%s' % name)
                     cb_func(*args)
                 else:
                     try:
@@ -174,14 +172,13 @@ class UrpmiRunner(object):
                         line = ("unknown handler for '%s'" % response,)
                         handler = self._on_backend_exception
                     handler(self, *line)
-            else:
-                print line
         return True
 
     def _backend_error_callback(self, stdout, condition):
-        if self._callback is not None:
-            self._callback.backend_error('backend pipe error')
-            self._callback = None
+        if self._task is not None:
+            callback = self._task[1]
+            callback.backend_error('backend pipe error')
+            self._task = None
         else:
             raise Exception, 'backend pipe error'
         self.kill_backend()
@@ -191,13 +188,16 @@ class UrpmiRunner(object):
     #
 
     def _on_backend_done(self, line):
-        self._callback.on_task_done()
+        task_id, callback = self._task[0:2]
+        callback.on_task_done(task_id)
         self._run_next_task()
 
     def _on_backend_error(self, line):
-        self._callback.on_task_error(line)
+        task_id, callback = self._task[0:2]
+        callback.on_task_error(task_id, line)
         self._run_next_task()
 
     def _on_backend_exception(self, line):
-        self._callback.on_task_exception(line)
+        task_id, callback = self._task[0:2]
+        callback.on_task_exception(task_id, line)
         self._run_next_task()

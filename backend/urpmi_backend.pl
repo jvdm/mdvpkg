@@ -77,6 +77,19 @@ sub response {
     printf("<mdvpkg> %s\n", join("\t", @_));
 }
 
+my ($progress_count, $progress_total);
+
+sub init_progress {
+    $progress_count = 0;
+    $progress_total = $_[0]
+}
+
+sub progress {
+    $progress_count += $_[0];
+    response('callback', 'task_progress',
+	     $progress_count, $progress_total)
+}
+
 #
 # Task Handlers
 #
@@ -109,7 +122,9 @@ sub on_task__install {
 	           auto_select => 0,
 	       );
 
-    # Create map of selected rpm names to package ids:
+    init_progress(1 + keys(%{ $state->{selected} }) * 2);
+
+    # Create map of selected rpm names to package ids ...
     my %pkg_map = ();
     for my $pkg (@{$urpm->{depslist}}[keys %{ $state->{selected} }]) {
 	$pkg_map{$pkg->fullname} = $pkg
@@ -119,6 +134,7 @@ sub on_task__install {
     my $exit_code;
     my %task_info = (set => undef,
                      progress => 0);
+    progress(1);
     $exit_code = urpm::main_loop::run(
         $urpm,
         $state,
@@ -134,8 +150,7 @@ sub on_task__install {
                 my $p = $pkg_map{fileparse($urlfile, '.rpm')};
                 my @na = ($p->name, $p->arch);
                 if ($mode eq 'start') {
-                    response('callback', 'download_start',
-                             @na);
+                    response('callback', 'download_start', @na);
                 }
                 elsif ($mode eq 'progress') {
 		    response('callback', 'download_progress',
@@ -144,6 +159,7 @@ sub on_task__install {
 		elsif ($mode eq 'end') {
 		    response('callback', 'download_progress',
 			     @na, 100, 0, 0, 0);
+		    progress(1);
 		}
 		elsif ($mode eq 'error') {
 		    # error message is 3rd argument:
@@ -158,7 +174,6 @@ sub on_task__install {
 		my ($set,
 		    $transaction_sources,
 		    $transaction_sources_install) = @_;
-		print $set, "\n";
 		$task_info{set} = $set;
 		$task_info{progress} = 0;
 	    },
@@ -195,6 +210,7 @@ sub on_task__install {
 			response('callback', 'install_end',
 				 $pkg->name, $pkg->arch,
 				 $evrd);
+			progress(1);
 		    }
 		}
 		elsif ($subtype eq 'start') {
@@ -218,12 +234,14 @@ sub on_task__install {
 	    need_restart => sub {
 		my ($need_restart_formatted) = @_;
 		print "$_\n" foreach values %$need_restart_formatted;
-		response('callback', 'nedd_restart');
+		response('callback', 'need_restart');
 	    },
 	    completed => sub {
 		undef $lock;
 		undef $rpm_lock;
 		response('done');
+		# reload package data:
+		urpm::media::configure($urpm);
 	    },
 	    post_download => sub {
 		# TODO Look for a cancellation flag so further

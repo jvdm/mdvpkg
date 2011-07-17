@@ -73,9 +73,12 @@ class MdvPkgDaemon(dbus.service.Object):
         dbus.service.Object.__init__(self, bus_name, mdvpkg.PATH)
 
         self.urpmi = UrpmiDB(backend_dir=backend_dir)
+        self.urpmi.connect('task-queued', self.TaskQueued)
+        self.urpmi.connect('task-running', self.TaskRunning)
+        self.urpmi.connect('task-progress', self.TaskProgress)
+        self.urpmi.connect('task-done', self.TaskDone)
         self.urpmi.configure_medias()
         self.urpmi.load_packages()
-        self.runner = mdvpkg.worker.Runner(self.urpmi, backend_dir)
 
         log.info('daemon is ready')
 
@@ -102,26 +105,22 @@ class MdvPkgDaemon(dbus.service.Object):
     @dbus.service.signal(dbus_interface=mdvpkg.IFACE,
                          signature='s')
     def TaskQueued(self, task_id):
-        """A task was created by some client."""
-        log.debug('NewTask(%s)', task_id)
+        log.debug('TaskQueued(%s)', task_id)
         
     @dbus.service.signal(dbus_interface=mdvpkg.IFACE,
                          signature='s')
     def TaskRunning(self, task_id):
-        """A task was created by some client."""
         log.debug('TaskRunning(%s)', task_id)
 
     @dbus.service.signal(dbus_interface=mdvpkg.IFACE,
                          signature='suu')
     def TaskProgress(self, task_id, count, total):
-        """A task was created by some client."""
         log.debug('TaskProgress(%s, %s, %s)', task_id, count, total)
 
     @dbus.service.signal(dbus_interface=mdvpkg.IFACE,
-                         signature='ss')
-    def TaskStateChanged(self, task_id, state):
-        """A task was created by some client."""
-        log.debug('TaskStateChanged(%s, state)', task_id, state)
+                         signature='s')
+    def TaskDone(self, task_id):
+        log.debug('TaskDone(%s)', task_id)
 
     #
     # Daemon methods

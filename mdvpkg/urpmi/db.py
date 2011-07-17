@@ -84,7 +84,11 @@ class UrpmiDB(object):
                          'download-error': [],
                          'install-start': [],
                          'install-progress': [],
-                         'preparing': []}
+                         'preparing': [],
+                         'task-queued': [],
+                         'task-running': [],
+                         'task-progress': [],
+                         'task-done': []}
         self._signals_callbacks = {}
 
     def emit(self, signal_name, *args, **kwargs):
@@ -216,9 +220,9 @@ class UrpmiDB(object):
                            install_names
                        )
         # self._runner.push(remove_task)
-        self._runner.push(self,
-                          mdvpkg.urpmi.task.ROLE_INSTALL,
-                          (install_names,))
+        return self._runner.push(self,
+                                 mdvpkg.urpmi.task.ROLE_INSTALL,
+                                 (install_names,))
 
     def _load_installed_packages(self):
         """Visit rpmdb and load data from installed packages."""
@@ -305,18 +309,21 @@ class UrpmiDB(object):
         return True
 
     def on_task_queued(self, task_id):
-        pass
+        self.emit('task-queued', task_id)
 
     def on_task_running(self, task_id):
-        pass
+        self.emit('task-running', task_id)
 
-    def on_task_done(self):
-        pass
+    def on_task_progress(self, task_id, count, total):
+        self.emit('task-progress', task_id, count, total)
 
-    def on_task_error(self, message):
+    def on_task_done(self, task_id):
+        self.emit('task-done', task_id)
+
+    def on_task_error(self, task_id, message):
         log.debug('task error: %s', message)
 
-    def on_task_exception(self, message):
+    def on_task_exception(self, task_id, message):
         log.debug('task exception: %s', message)
 
     def on_download_start(self, name, arch):
