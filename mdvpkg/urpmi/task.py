@@ -156,8 +156,7 @@ class UrpmiRunner(object):
                     except ValueError:
                         name = response[1]
                         args = ()
-                    if name == 'task_progress':
-                        args.insert(0, self._task[0])
+                    args.insert(0, self._task[0])
                     cb_func = getattr(callback, 'on_%s' % name)
                     cb_func(*args)
                 else:

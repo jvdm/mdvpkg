@@ -303,29 +303,29 @@ class DBusPackageList(PackageList, dbus.service.Object):
         log.debug('Error(%s, %s) called', code, message)
 
     @dbus.service.signal(dbus_interface=mdvpkg.PACKAGE_LIST_IFACE,
-                         signature='u')
-    def DownloadStart(self, index):
+                         signature='su')
+    def DownloadStart(self, task_id, index):
         log.debug('DownloadStart(%s) called', index)
 
     @dbus.service.signal(dbus_interface=mdvpkg.PACKAGE_LIST_IFACE,
-                         signature='ussss')
-    def DownloadProgress(self, index, percent, total, eta, speed):
-        log.debug('DownloadStart(%s) called', index)
+                         signature='sussss')
+    def DownloadProgress(self, task_id, index, percent, total, eta, speed):
+        log.debug('DownloadProgress(%s, %s) called', index, percent)
 
     @dbus.service.signal(dbus_interface=mdvpkg.PACKAGE_LIST_IFACE,
-                         signature='s')
-    def Preparing(self, total):
+                         signature='ss')
+    def Preparing(self, task_id, total):
         log.debug('Preparing(%s) called', total)
 
     @dbus.service.signal(dbus_interface=mdvpkg.PACKAGE_LIST_IFACE,
-                         signature='uss')
-    def InstallStart(self, index, total, count):
-        log.debug('DownloadStart(%s) called', index)
+                         signature='suss')
+    def InstallStart(self, task_id, index, total, count):
+        log.debug('InstallStart(%s, %s) called', index, total)
 
     @dbus.service.signal(dbus_interface=mdvpkg.PACKAGE_LIST_IFACE,
-                         signature='uss')
-    def InstallProgress(self, index, amount, total):
-        log.debug('DownloadStart(%s) called', index)
+                         signature='suss')
+    def InstallProgress(self, task_id, index, amount, total):
+        log.debug('InstallProgress(%s, %s) called', index, amount)
 
     def on_delete(self):
         """List must be deleted."""
@@ -359,44 +359,49 @@ class DBusPackageList(PackageList, dbus.service.Object):
     # Urpmi signal callbacks
     #
 
-    def _on_download_start(self, package):
+    def _on_download_start(self, task_id, package):
         try:
             index = self._names.index(package.na)
         except ValueError:
             pass
         else:
-            self.DownloadStart(index)
+            self.DownloadStart(task_id, index)
 
-    def _on_download_progress(self, package, percent, total, eta, speed):
+    def _on_download_progress(self, task_id, package, percent,
+                              total, eta, speed):
         try:
             index = self._names.index(package.na)
         except ValueError:
             pass
         else:
-            self.DownloadProgress(index, percent, total, eta, speed)
+            self.DownloadProgress(
+                task_id, index, percent, total, eta, speed
+            )
 
     def _on_download_error(self, package, message):
         self.Error('download-error', message)
 
-    def _on_install_start(self, package, total, count):
+    def _on_install_start(self, task_id, package, total, count):
         try:
             index = self._names.index(package.na)
         except ValueError:
             pass
         else:
-            self.InstallStart(index, total, count)
+            self.InstallStart(task_id, index, total, count)
 
-    def _on_install_progress(self, package, amount, total):
+    def _on_install_progress(self, task_id, package, amount, total):
         try:
             index = self._names.index(package.na)
         except ValueError:
             pass
         else:
-            self.InstallProgress(index, amount, total)
-        PackageList._on_install_progress(self, package, amount, total)
+            self.InstallProgress(task_id, index, amount, total)
+        PackageList._on_install_progress(
+            self, task_id, package, amount, total
+        )
 
-    def _on_preparing(self, total):
-        self.Preparing(total)
+    def _on_preparing(self, task_id, total):
+        self.Preparing(task_id, total)
 
 
 def run():

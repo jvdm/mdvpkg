@@ -323,35 +323,37 @@ class UrpmiDB(object):
         log.debug('task error: %s', message)
 
     def on_task_exception(self, task_id, message):
-        log.debug('task exception: %s', message)
+        log.debug('task exception: %s: %s', task_id, message)
 
-    def on_download_start(self, name, arch):
+    def on_download_start(self, task_id, name, arch):
         package = self._cache[(name, arch)]
-        self.emit('download-start', package)
+        self.emit('download-start', task_id, package)
 
-    def on_download_progress(self, name, arch, percent, total, eta, speed):
+    def on_download_progress(self, task_id, name, arch, percent,
+                             total, eta, speed):
         package = self._cache[(name, arch)]
-        self.emit('download-progress', package, percent, total, eta, speed)
+        self.emit('download-progress',
+                  task_id, package, percent, total, eta, speed)
 
-    def on_download_error(self, name, arch, message):
+    def on_download_error(self, task_id, name, arch, message):
         package = self._cache[(name, arch)]
-        self.emit('download-error', package, message)
+        self.emit('download-error', task_id, package, message)
 
-    def on_preparing(self, total):
-        self.emit('preparing', total)
+    def on_preparing(self, task_id, total):
+        self.emit('preparing', task_id, total)
 
-    def on_install_start(self, name, arch, total, count):
+    def on_install_start(self, task_id, name, arch, total, count):
         package = self._cache[(name, arch)]
-        self.emit('install-start', package, total, count)
+        self.emit('install-start', task_id, package, total, count)
 
-    def on_install_end(self, name, arch, evrd):
+    def on_install_end(self, task_id, name, arch, evrd):
         package = self._cache[(name, arch)]
         package.in_progress = False
         package.on_install(eval(evrd))
 
-    def on_install_progress(self, name, arch, amount, total):
+    def on_install_progress(self, task_id, name, arch, amount, total):
         package = self._cache[(name, arch)]
-        self.emit('install-progress', package, amount, total)
+        self.emit('install-progress', task_id, package, amount, total)
 
 
 ACTION_NO_ACTION = 'action-no-action'
@@ -559,21 +561,22 @@ class PackageList(object):
     # Signal callbacks
     #
 
-    def _on_download_start(self, package):
+    def _on_download_start(self, task_id, package):
         pass
 
-    def _on_download_progress(self, package, percent, total, eta, speed):
+    def _on_download_progress(self, task_id, package, percent, 
+                              total, eta, speed):
         pass
 
-    def _on_download_error(self, package, message):
+    def _on_download_error(self, task_id, package, message):
         pass
 
-    def _on_install_start(self, package, total, count):
+    def _on_install_start(self, task_id, package, total, count):
         pass
 
-    def _on_install_progress(self, package, amount, total):
+    def _on_install_progress(self, task_id, package, amount, total):
         if amount == total:
             self._items[package.na]['action'] = ACTION_NO_ACTION
 
-    def _on_preparing(self, total):
+    def _on_preparing(self, task_id, total):
         pass
