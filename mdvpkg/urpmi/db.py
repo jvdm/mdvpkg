@@ -219,7 +219,6 @@ class UrpmiDB(object):
                            mdvpkg.urpmi.task.ROLE_INSTALL,
                            install_names
                        )
-        # self._runner.push(remove_task)
         return self._runner.push(self,
                                  mdvpkg.urpmi.task.ROLE_INSTALL,
                                  (install_names,))
@@ -466,7 +465,7 @@ class PackageList(object):
 
         # TODO Add method for removing packages ...
 
-        self._urpmi.run_task(install=installs, remove=removes)
+        return self._urpmi.run_task(install=installs, remove=removes)
 
     def get_groups(self):
         """Return the dict of package groups and package count in

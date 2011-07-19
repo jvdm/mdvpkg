@@ -268,14 +268,14 @@ class DBusPackageList(PackageList, dbus.service.Object):
 
     @dbus.service.method(mdvpkg.PACKAGE_LIST_IFACE,
                          in_signature='',
-                         out_signature='',
+                         out_signature='s',
                          sender_keyword='sender',
                          connection_keyword='connection')
     def ProcessActions(self, sender, connection):
 	# check_authorization(sender,
         #                     connection,
         #                     'org.mandrivalinux.mdvpkg.auth_admin_keep')
-        self.process_actions()
+        return self.process_actions()
         
     #
     # DBus signals
