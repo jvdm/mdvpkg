@@ -28,9 +28,10 @@ import dbus
 class MdvPkgError(dbus.DBusException):
     """Base error class for mdvpkg."""
 
-    def __init__(self):
+    def __init__(self, message):
         name = self.__class__.__name__
         self._dbus_error_name = 'org.mandrivalinux.mdvpkg.%s' % name
+        dbus.DBusException.__init__(self, message)
 
 
 class TaskAlreadyRunning(MdvPkgError):
