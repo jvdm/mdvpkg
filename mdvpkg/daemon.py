@@ -211,7 +211,7 @@ class DBusPackageList(PackageList, dbus.service.Object):
     def Get(self, index, attributes, sender):
         log.debug('Get(%s, %s)', index, attributes)
         self._check_owner(sender)
-        if index >= len(self):
+        if index < 0 or index >= len(self):
             raise mdvpkg.exceptions.MdvPkgError(
                       'index out of range: %s' % index
                   )
