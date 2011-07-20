@@ -279,10 +279,7 @@ class DBusPackageList(PackageList, dbus.service.Object):
 	# check_authorization(sender,
         #                     connection,
         #                     'org.mandrivalinux.mdvpkg.auth_admin_keep')
-        try:
-            return self.process_actions()
-        except ValueError:
-            raise mdvpkg.exceptions.MdvPkgError('no action selected')
+        return self.process_actions()
         
     #
     # DBus signals
