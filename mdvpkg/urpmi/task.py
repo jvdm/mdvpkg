@@ -170,7 +170,7 @@ class UrpmiRunner(object):
                     except AttributeError:
                         line = ("unknown handler for '%s'" % response,)
                         handler = self._on_backend_exception
-                    handler(self, *line)
+                    handler(*line)
         return True
 
     def _backend_error_callback(self, stdout, condition):
