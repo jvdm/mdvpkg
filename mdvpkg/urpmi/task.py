@@ -186,7 +186,7 @@ class UrpmiRunner(object):
     # Reply callbacks ...
     #
 
-    def _on_backend_done(self, line):
+    def _on_backend_done(self):
         task_id, callback = self._task[0:2]
         callback.on_task_done(task_id)
         self._run_next_task()
