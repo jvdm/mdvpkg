@@ -464,9 +464,8 @@ class PackageList(object):
                 installs.append(na)
             elif item['action'] == ACTION_REMOVE:
                 removes.append(na)
-
-        # TODO Add method for removing packages ...
-
+        if not installs and not removes:
+            raise ValueError('no action was selected')
         return self._urpmi.run_task(install=installs, remove=removes)
 
     def get_groups(self):
