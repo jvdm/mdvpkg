@@ -271,6 +271,16 @@ class DBusPackageList(PackageList, dbus.service.Object):
         self.install(index)
 
     @dbus.service.method(mdvpkg.PACKAGE_LIST_IFACE,
+                           in_signature='u',
+                           out_signature='',
+                           sender_keyword='sender',
+                           connection_keyword='connection')
+    def Remove(self, index, sender, connection):
+        """Mark a package and its dependencies for removal."""
+        log.debug('Remove(%s) called', index)
+        self.remove(index)
+
+    @dbus.service.method(mdvpkg.PACKAGE_LIST_IFACE,
                          in_signature='',
                          out_signature='s',
                          sender_keyword='sender',
@@ -333,6 +343,17 @@ class DBusPackageList(PackageList, dbus.service.Object):
                          signature='suss')
     def InstallProgress(self, task_id, index, amount, total):
         log.debug('InstallProgress(%s, %s) called', index, amount)
+
+    @dbus.service.signal(dbus_interface=mdvpkg.PACKAGE_LIST_IFACE,
+                         signature='su')
+    def RemoveStart(self, task_id, index):
+        log.debug('RemoveStart(%s) called', index)
+
+    @dbus.service.signal(dbus_interface=mdvpkg.PACKAGE_LIST_IFACE,
+                         signature='sus')
+    def RemoveProgress(self, task_id, index, progress):
+        log.debug('RemoveProgress(%s, %s) called', index, progress)
+
 
     def on_delete(self):
         """List must be deleted."""
@@ -410,6 +431,21 @@ class DBusPackageList(PackageList, dbus.service.Object):
     def _on_preparing(self, task_id, total):
         self.Preparing(task_id, total)
 
+    def _on_remove_start(self, task_id, package):
+        try:
+            index = self._names.index(package.na)
+        except ValueError:
+            pass
+        else:
+            self.RemoveStart(task_id, index)
+
+    def _on_remove_progress(self, task_id, package, progress):
+        try:
+            index = self._names.index(package.na)
+        except ValueError:
+            pass
+        else:
+            self.RemoveProgress(task_id, index, progress)
 
 def run():
     """Run the mdvpkg daemon from command line."""

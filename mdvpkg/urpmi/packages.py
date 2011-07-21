@@ -324,6 +324,14 @@ class Package(gobject.GObject):
         self._set_latest_installed(version['rpm'])
         self._set_type(version, 'installed')
 
+    def on_remove(self, evrd):
+        """React to the removal of an installed evrd."""
+        evrd = RpmEVRD(evrd)
+        version = self._versions.get(evrd)
+        if version is None:
+            raise ValueError, 'not version of %s: %s' % (self.na, evrd)
+        self._set_type(version, 'upgrade')
+
     def _set_latest_installed(self, rpm):
         if not self.has_installs or rpm > self.latest_installed:
             for updict in self._list_by_type('upgrade'):

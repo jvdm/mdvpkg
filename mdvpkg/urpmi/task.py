@@ -32,8 +32,7 @@ import subprocess
 
 log = logging.getLogger('mdvpkgd.urpmi.task')
 
-ROLE_INSTALL = 'role-install'
-ROLE_REMOVE = 'role-remove'
+ROLE_COMMIT = 'role-commit'
 
 STATE_QUEUED = 'state-queued'
 STATE_RUNNING = 'state-running'
@@ -59,7 +58,7 @@ class UrpmiRunner(object):
         self._task = None  # (task_id, callback, role, args)
         self._backend_path = os.path.join(backend_dir, 'urpmi_backend.pl')
         self._backend_proc = None
-        self._role_handlers = {ROLE_INSTALL: self._handle_install}
+        self._role_handlers = {ROLE_COMMIT: self._handle_commit}
 
     @property
     def backend_is_running(self):
@@ -130,9 +129,9 @@ class UrpmiRunner(object):
     # Role handlers ...
     #
 
-    def _handle_install(self, names):
-        names.insert(0, 'install')
-        self.backend.stdin.write('%s\n' % '\t'.join(names))
+    def _handle_commit(self, installs, removes):
+        installs.extend(['r:' + remove for remove in removes])
+        self.backend.stdin.write('commit\t%s\n' % '\t'.join(installs))
 
     #
     # Backend I/O callbacks ...
@@ -155,7 +154,7 @@ class UrpmiRunner(object):
                         args = args.split('\t')
                     except ValueError:
                         name = response[1]
-                        args = ()
+                        args = []
                     args.insert(0, self._task[0])
                     cb_func = getattr(callback, 'on_%s' % name)
                     cb_func(*args)

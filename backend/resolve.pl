@@ -51,32 +51,19 @@ MAIN: {
     my $urpm = urpm->new_parse_cmdline;
     urpm::media::configure($urpm);
 
-    # Search package by name ...
-    my %packages;
-    my $ret = urpm::select::search_packages(
-	$urpm,
-	\%packages,
-	\@names,
-	fuzzy => 0,
-	no_substring => 1,
-    );
-    if (not $ret) {
-	print "%MDVPKG ERROR error-not-found\n";
-	exit 1;
+    # Parse args ...
+    my $installs = [];
+    my $removes = [];
+    foreach (@names) {
+	my $list = s/^r:(.*)/$1/ ? $removes : $installs;
+	push @$list, $_;
     }
 
-    # Resolve dependencies ...
-    my %state;
-    my $restart;
-    $restart = urpm::select::resolve_dependencies(
-	           $urpm,
-	           \%state,
-	           \%packages,
-	           auto_select => 0,
-	       );
+    my ($restart, $state, $to_remove, %pkg_map)
+	= _get_state($urpm, $installs, $removes);
 
     # Check %state and emit return data ...
-    while (my ($id, $info) = each %{ $state{selected} }) {
+    while (my ($id, $info) = each %{ $state->{selected} }) {
 	my $pkg = $urpm->{depslist}[$id];
 	my $action;
 	if (defined $info->{requested}) {
@@ -85,11 +72,126 @@ MAIN: {
 	else {
 	    $action = 'action-auto-install';
 	}
-	printf("%%MDVPKG SELECTED %s %s@%s\n",
-	       $action,
-	       $pkg->name,
-	       $pkg->arch);
+	response_action($pkg->name, $pkg->arch, $action);
     }
 
+    foreach (@{ $state->{orphans_to_remove} }) {
+	response_action($_->name, $_->arch, 'action-auto-remove');
+    }
+
+    foreach (grep {
+	         $state->{rejected}{$_}{removed}
+		     && !$state->{rejected}{$_}{obsoleted};
+	     } keys %{$state->{rejected} || {}})
+    {
+	my $disttag = $state->{rejected}{$_}{disttag} || '';
+	my $distepoch = $state->{rejected}{$_}{distepoch} || '';
+	s/-$disttag$distepoch//;
+	my $name;
+	my $arch;
+	($name, undef, undef, $arch) = /^(.+)-([^-]+)-([^-].*)\.(.+)$/;
+	response_action($name, $arch, 'action-remove');
+    }
+
+    # TODO There is no conflict checking !!
+
     exit 0;
+}
+
+sub response_action {
+    my ($name, $arch, $action) = @_;
+	printf("%%MDVPKG SELECTED %s %s@%s\n",
+	       $action,
+	       $name,
+	       $arch);
+
+}
+
+######################################################################
+# TODO Replicated code from urpmi_backend
+######################################################################
+
+# %options
+#   - auto_select: passed to resolve dependencies
+sub _get_state {
+    my ($urpm, $installs, $removals, %options) = @_;
+
+    my %state = ();
+    my @to_remove = ();
+    my %pkg_map = ();
+
+    if (@{ $removals || [] }) {
+        @to_remove = urpm::select::find_packages_to_remove(
+			$urpm,
+			\%state,
+			$removals,
+			callback_notfound => sub {
+			    shift;
+			    response('error', 'error-not-found', @_);
+			    return;
+			},
+			callback_base => sub {
+			    shift;
+			    response('error', 'error-remove-base', @_);
+			    return;
+		    }) or do {
+			return;
+		    };
+	my %remove_names = map { $_ => undef } @to_remove;
+	foreach (@{ $urpm->{depslist} }) {
+	    if (exists $remove_names{$_->fullname}) {
+		delete $remove_names{$_->fullname};
+		my $key = sprintf('%s-%s-%s.%s',
+				  $_->name,
+				  $_->version,
+				  $_->release,
+				  $_->arch);
+		$pkg_map{$key} = $_;
+	    }
+	}
+
+	urpm::orphans::compute_future_unrequested_orphans($urpm, \%state);
+	push(@to_remove,
+	     map {
+		 scalar $_->fullname
+	     } @{ $state{orphans_to_remove} });
+	foreach (@{ $state{orphans_to_remove} }) {
+	    my $key = sprintf('%s-%s-%s.%s',
+			      $_->name,
+			      $_->version,
+			      $_->release,
+			      $_->arch);
+	    $pkg_map{$key} = $_;
+	}
+
+    }
+
+    my %packages = ();
+    my $restart;
+    if (@{ $installs || [] }) {
+	urpm::select::search_packages(
+	    $urpm,
+	    \%packages,
+	    $installs,
+	    fuzzy => 0,
+	    no_substring => 1,
+	) or do {
+	    response('error', 'error-not-found', @{ $installs });
+	    return;
+	};
+	$restart = urpm::select::resolve_dependencies(
+		       $urpm,
+		       \%state,
+		       \%packages,
+		       auto_select => $options{auto_select},
+		   );
+    }
+
+    foreach (@{ $urpm->{depslist} }[keys %{ $state{selected} || {} }]) {
+	$pkg_map{$_->fullname} = $_;
+    }
+
+    # TODO Check $state for conflicts and report that to caller as
+    #      error responses.
+    return $restart, \%state, \@to_remove, %pkg_map;
 }

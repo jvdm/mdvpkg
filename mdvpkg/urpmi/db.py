@@ -84,6 +84,8 @@ class UrpmiDB(object):
                          'download-error': [],
                          'install-start': [],
                          'install-progress': [],
+                         'remove-start': [],
+                         'remove-progress': [],
                          'preparing': [],
                          'task-queued': [],
                          'task-running': [],
@@ -167,13 +169,15 @@ class UrpmiDB(object):
         """
         return self._cache.itervalues()
 
-    def resolve_install_deps(self, name_arch):
+    def resolve_deps(self, installs=[], removes=[]):
         """Resolve all install deps to install package and return a
         dictionary of actions.
         """
 
         selected = {'action-install': [],
-                    'action-auto-install': []}
+                    'action-auto-install': [],
+                    'action-remove': [],
+                    'action-auto-remove': []}
         backend = subprocess.Popen(os.path.join(self.backend_dir,
                                                 'resolve.pl'),
                                    shell=True,
@@ -181,7 +185,14 @@ class UrpmiDB(object):
                                    stdout=subprocess.PIPE)
         # ATTENTION: We're using RpmPackage.__str__() as argument to
         #            the backend.
-        backend.stdin.write('%s\n' % self._cache[name_arch].latest_upgrade)
+        args = []
+        for install in installs:
+            name = self._cache[install].latest_upgrade.__str__()
+            args.append(name)
+        for remove in removes:
+            name = self._cache[remove].latest_installed.__str__()
+            args.append('r:' + name)
+        backend.stdin.write('%s\n' % '\t'.join(args))
         for line in backend.communicate()[0].split('\n'):
             fields = line.split()
             if fields and fields[0] == '%MDVPKG':
@@ -203,25 +214,15 @@ class UrpmiDB(object):
         """
         remove_names = []
         for pkg in [self._cache[na] for na in remove]:
-            remove_names.append(pkg.name)
+            remove_names.append(pkg.latest_installed.__str__())
             pkg.in_progress = True
-        remove_task = mdvpkg.urpmi.task.create_task(
-                           self,
-                           mdvpkg.urpmi.task.ROLE_REMOVE,
-                           remove_names
-                      )
         install_names = []
         for pkg in [self._cache[na] for na in install]:
-            install_names.append('%s' % pkg.latest_upgrade)
+            install_names.append(pkg.latest_upgrade.__str__())
             pkg.in_progress = True
-        install_task = mdvpkg.urpmi.task.create_task(
-                           self,
-                           mdvpkg.urpmi.task.ROLE_INSTALL,
-                           install_names
-                       )
         return self._runner.push(self,
-                                 mdvpkg.urpmi.task.ROLE_INSTALL,
-                                 (install_names,))
+                                 mdvpkg.urpmi.task.ROLE_COMMIT,
+                                 (install_names,remove_names))
 
     def _load_installed_packages(self):
         """Visit rpmdb and load data from installed packages."""
@@ -355,6 +356,19 @@ class UrpmiDB(object):
         package = self._cache[(name, arch)]
         self.emit('install-progress', task_id, package, amount, total)
 
+    def on_remove_start(self, task_id, name, arch):
+        package = self._cache[(name, arch)]
+        self.emit('remove-start', task_id, package)
+
+    def on_remove_end(self, task_id, name, arch, evrd):
+        package = self._cache[(name, arch)]
+        package.in_progress = False
+        package.on_remove(eval(evrd))
+
+    def on_remove_progress(self, task_id, name, arch, progress):
+        package = self._cache[(name, arch)]
+        self.emit('remove-progress', task_id, package, progress)
+
 
 ACTION_NO_ACTION = 'action-no-action'
 ACTION_INSTALL = 'action-install'
@@ -400,7 +414,9 @@ class PackageList(object):
                  'download-error': self._on_download_progress,
                  'install-start': self._on_install_start,
                  'install-progress': self._on_install_progress,
-                 'preparing': self._on_preparing}.iteritems():
+                 'remove-start': self._on_remove_start,
+                 'remove-progress': self._on_remove_progress,
+                 'preparing': self._on_preparing,}.iteritems():
             handler = self._urpmi.connect(signal, callback)
             self._handlers.append(handler)
 
@@ -445,10 +461,37 @@ class PackageList(object):
                        'rpm': package.latest}
         return return_dict
 
+    def remove(self, index):
+        na = self._names[index]
+        if self._urpmi.get_package(na).has_installs is not True:
+            raise ValueError, '%s not installed' % na
+        self._items[na]['action'] = ACTION_REMOVE
+        self._solve()
+
     def install(self, index):
+        na = self._names[index]
+        if self._urpmi.get_package(na).status == 'installed':
+            raise ValueError, '%s already installed' % na
+        self._items[na]['action'] = ACTION_INSTALL
+        self._solve()
+
+    def _solve(self):
         """Select a package for installation and all it's dependencies."""
-        for action, names in self._urpmi.resolve_install_deps(
-                                 self._names[index]
+        installs = []
+        removes = []
+        for na, item in self._items.iteritems():
+            if item['action'] == ACTION_INSTALL:
+                item['action'] = ACTION_NO_ACTION
+                installs.append(na)
+            elif item['action'] == ACTION_REMOVE:
+                item['action'] = ACTION_NO_ACTION
+                removes.append(na)
+            elif item['action'] != ACTION_NO_ACTION:
+                item['action'] = ACTION_NO_ACTION
+
+        for action, names in self._urpmi.resolve_deps(
+                                 installs=installs,
+                                 removes=removes
                              ).iteritems():
             for na in names:
                 log.debug('action changed for %s: %s', na, action)
@@ -578,4 +621,10 @@ class PackageList(object):
             self._items[package.na]['action'] = ACTION_NO_ACTION
 
     def _on_preparing(self, task_id, total):
+        pass
+
+    def _on_remove_start(self, task_id, package):
+        pass
+
+    def _on_remove_progress(self, task_id, package, progress):
         pass

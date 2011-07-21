@@ -32,6 +32,8 @@ use urpm::media qw();
 use urpm::args qw();
 use urpm::select qw();
 use urpm::main_loop qw();
+use urpm::install qw();
+use urpm::orphans qw();
 
 use File::Basename qw(fileparse);
 
@@ -45,6 +47,9 @@ our $read_tasks = 1;
 $SIG{TERM} = sub {
     $read_tasks = 0;
 };
+
+our $rpmdb_lock;
+our $urpmdb_lock;
 
 
 MAIN: {
@@ -69,6 +74,7 @@ MAIN: {
     }
 }
 
+
 #
 # Backend responses
 #
@@ -90,58 +96,186 @@ sub progress {
 	     $progress_count, $progress_total)
 }
 
+sub _lock {
+    my $urpm = shift @_;
+    $urpmdb_lock = urpm::lock::urpmi_db($urpm, undef, wait => 0);
+    $rpmdb_lock = urpm::lock::rpm_db($urpm, 'exclusive');
+}
+
+sub _unlock {
+    $urpmdb_lock = undef;
+    $rpmdb_lock = undef;
+}
+
+sub get_evrd {
+    my ($pkg) = @_;
+    my $evrd = sprintf(
+	"{'epoch': %s," .
+	" 'version': '%s'," .
+	" 'release': '%s'",
+	$pkg->epoch,
+	$pkg->version,
+	$pkg->release);
+    if ($pkg->distepoch) {
+	$evrd .= sprintf(", 'distepoch': '%s'}",
+			 $pkg->distepoch);
+    }
+    else {
+	$evrd .= '}'
+    }
+    return $evrd;
+}
+
+# %options
+#   - auto_select: passed to resolve dependencies
+sub _get_state {
+    my ($urpm, $installs, $removals, %options) = @_;
+
+    my %state = ();
+    my @to_remove = ();
+    my %pkg_map = ();
+
+    if (@{ $removals || [] }) {
+        @to_remove = urpm::select::find_packages_to_remove(
+			$urpm,
+			\%state,
+			$removals,
+			callback_notfound => sub {
+			    shift;
+			    response('error', 'error-not-found', @_);
+			    return;
+			},
+			callback_base => sub {
+			    shift;
+			    response('error', 'error-remove-base', @_);
+			    return;
+		    }) or do {
+			return;
+		    };
+	my %remove_names = map { $_ => undef } @to_remove;
+	foreach (@{ $urpm->{depslist} }) {
+	    if (exists $remove_names{$_->fullname}) {
+		delete $remove_names{$_->fullname};
+		my $key = sprintf('%s-%s-%s.%s',
+				  $_->name,
+				  $_->version,
+				  $_->release,
+				  $_->arch);
+		$pkg_map{$key} = $_;
+	    }
+	}
+
+	urpm::orphans::compute_future_unrequested_orphans($urpm, \%state);
+	push(@to_remove,
+	     map {
+		 scalar $_->fullname
+	     } @{ $state{orphans_to_remove} });
+	foreach (@{ $state{orphans_to_remove} }) {
+	    my $key = sprintf('%s-%s-%s.%s',
+			      $_->name,
+			      $_->version,
+			      $_->release,
+			      $_->arch);
+	    $pkg_map{$key} = $_;
+	}
+
+    }
+
+    my %packages = ();
+    my $restart;
+    if (@{ $installs || [] }) {
+	urpm::select::search_packages(
+	    $urpm,
+	    \%packages,
+	    $installs,
+	    fuzzy => 0,
+	    no_substring => 1,
+	) or do {
+	    response('error', 'error-not-found', @{ $installs });
+	    return;
+	};
+	$restart = urpm::select::resolve_dependencies(
+		       $urpm,
+		       \%state,
+		       \%packages,
+		       auto_select => $options{auto_select},
+		   );
+    }
+
+    foreach (@{ $urpm->{depslist} }[keys %{ $state{selected} || {} }]) {
+	$pkg_map{$_->fullname} = $_;
+    }
+
+    # TODO Check $state for conflicts and report that to caller as
+    #      error responses.
+    return $restart, \%state, \@to_remove, %pkg_map;
+}
+
 #
 # Task Handlers
 #
 
-sub on_task__install {
-    my ($urpm, @names) = @_;
+sub on_task__commit {
+    my ($urpm, @args) = @_;
 
-    @names or die "Missing package names to install\n";
-
-    # Search packages by name, getting their id ...
-    my %packages;
-    urpm::select::search_packages(
-	$urpm, 
-	\%packages,
-	\@names, 
-    );
-
-    # Lock urpmi and rpm databases, in third argument we can specified
-    # if the script must wait until urpmi or rpm databases are locked ...
-    my $lock = urpm::lock::urpmi_db($urpm, undef, wait => 0);
-    my $rpm_lock = urpm::lock::rpm_db($urpm, 'exclusive');
-
-    # Resolve dependencies, get $state object ...
-    my $state = {};
-    my $restart;
-    $restart = urpm::select::resolve_dependencies(
-	           $urpm,
-	           $state,
-	           \%packages,
-	           auto_select => 0,
-	       );
-
-    init_progress(1 + keys(%{ $state->{selected} }) * 2);
-
-    # Create map of selected rpm names to package ids ...
-    my %pkg_map = ();
-    for my $pkg (@{$urpm->{depslist}}[keys %{ $state->{selected} }]) {
-	$pkg_map{$pkg->fullname} = $pkg
+    # Parse args ...
+    my $installs = [];
+    my $removes = [];
+    foreach (@args) {
+	my $list = s/^r:(.*)/$1/ ? $removes : $installs;
+	push @$list, $_;
     }
+
+    _lock();
+
+    my ($restart, $state, $to_remove, %pkg_map)
+	= _get_state($urpm, $installs, $removes);
+
+    init_progress(1
+		  + keys(%{ $state->{selected} }) * 2 # download + install
+	          + @$to_remove);                       # number of removes
+
+    # Remove packages ...
+    urpm::install::install(
+	$urpm,
+	$to_remove,
+	{},
+	{},
+	callback_report_uninst => sub {
+	    my @return = split(/ /, $_[0]);
+	    my $pkg = $pkg_map{$return[-1]};
+	    my $evrd = get_evrd($pkg);
+	    response('callback', 'remove_start',
+		     $pkg->name, $pkg->arch);
+	    response('callback', 'remove_progress',
+		     $pkg->name, $pkg->arch, 100);
+	    response('callback', 'remove_end',
+		     $pkg->name, $pkg->arch, $evrd);
+	    progress(1);
+	}
+    );
 
     # Start urpm loop to download, remove and install packages ...
     my $exit_code;
     my %task_info = (set => undef,
                      progress => 0);
     progress(1);
+
     $exit_code = urpm::main_loop::run(
-        $urpm,
-        $state,
-        undef,
-        undef, #\@ask_unselect,
-        \%packages,
+	$urpm,
+	$state,
+	undef,
+	undef,
+	undef,
         {
+	    completed => sub {
+		_unlock();
+		response('done');
+		# reload package data:
+		urpm::media::configure($urpm);
+	    },
+	    pre_removable => undef,
+	    post_removable => undef,
             copy_removable => sub {
                 die "removable media found: $_[0]\n";
             },
@@ -170,21 +304,11 @@ sub on_task__install {
 		    die "trans_log callback with unknown mode: $mode\n";
 		}
 	    },
-	    post_extract => sub {
-		my ($set,
-		    $transaction_sources,
-		    $transaction_sources_install) = @_;
-		$task_info{set} = $set;
-		$task_info{progress} = 0;
-	    },
-	    bad_signature => sub {
-		response('callback', 'bad_signature');
-		undef $lock;
-		undef $rpm_lock;
-		die "bad signature\n";
-	    },
-	    trans_error_summary => sub {
-		die "not implemented callback: trans_error_summary\n";
+	    trans => sub {
+		my ($urpm, $type, $id, $subtype, $amount, $total) = @_;
+		if ($subtype eq 'start') {
+		    response('callback', 'preparing', $total);
+		}
 	    },
 	    inst => sub {
 		my ($urpm, $type, $id, $subtype, $amount, $total) = @_;
@@ -193,20 +317,7 @@ sub on_task__install {
 		    response('callback', 'install_progress',
 			     $pkg->name, $pkg->arch, $amount, $total);
 		    if ($amount ==  $total) {
-			my $evrd = sprintf(
-			    "{'epoch': %s," .
-			    " 'version': '%s'," .
-			    " 'release': '%s'",
-			    $pkg->epoch,
-			    $pkg->version,
-			    $pkg->release);
-			if ($pkg->distepoch) {
-			    $evrd .= sprintf(", 'distepoch': '%s'}",
-					     $pkg->distepoch);
-			}
-			else {
-			    $evrd .= '}'
-			}
+			my $evrd = get_evrd($pkg);
 			response('callback', 'install_end',
 				 $pkg->name, $pkg->arch,
 				 $evrd);
@@ -221,39 +332,44 @@ sub on_task__install {
 			     $task_info{progress});
 		}
 	    },
-	    trans => sub {
-		my ($urpm, $type, $id, $subtype, $amount, $total) = @_;
-		if ($subtype eq 'start') {
-		    response('callback', 'preparing', $total);
-		}
-	    },
 	    ask_yes_or_no => sub {
 		response('callback', 'ask');
 		return <> =~ /|Y|y|Yes|yes|true|True|/;
+	    },
+	    message => sub {
+		my ($title, $message) = @_;
+		response('callback', 'message',
+			 $title, $message);
+	    },
+	    post_extract => sub {
+		my ($set,
+		    $transaction_sources,
+		    $transaction_sources_install) = @_;
+		$task_info{set} = $set;
+		$task_info{progress} = 0;
+	    },
+	    pre_check_sig => undef,
+	    check_sig => undef,
+	    bad_signature => sub {
+		response('callback', 'bad_signature');
+		_unlock();
+		die "bad signature\n";
+	    },
+	    post_download => sub {
+		# TODO Look for a cancellation flag so further
+		#      installation won't go
 	    },
 	    need_restart => sub {
 		my ($need_restart_formatted) = @_;
 		print "$_\n" foreach values %$need_restart_formatted;
 		response('callback', 'need_restart');
 	    },
-	    completed => sub {
-		undef $lock;
-		undef $rpm_lock;
-		response('done');
-		# reload package data:
-		urpm::media::configure($urpm);
+	    trans_error_summary => sub {
+		die "not implemented callback: trans_error_summary\n";
 	    },
-	    post_download => sub {
-		# TODO Look for a cancellation flag so further
-		#      installation won't go
-	    },
-	    message => sub {
-		my ($title, $message) = @_;
-		response('callback', 'message',
-			 $title, $message);
-	    }
+	    success_summary => undef,
 	}
-    );    
+    );
 }
 
 sub on_task__search_files {
