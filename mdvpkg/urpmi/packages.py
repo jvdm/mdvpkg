@@ -178,7 +178,7 @@ class Package(gobject.GObject):
         self._types = {'installed': [],
                        'upgrade': [],
                        'downgrade': []}
-        self.in_progress = False
+        self.in_progress = None
 
     @property
     def name(self):
@@ -191,8 +191,13 @@ class Package(gobject.GObject):
     @property
     def status(self):
         """Package entry status."""
-        if self.in_progress:
+        if self.in_progress is not None:
             return 'in-progress'
+        return self.current_status
+
+    @property
+    def current_status(self):
+        """Package status prior to action."""
         if self.has_installs:
             if self.has_upgrades:
                 return 'upgrade'
@@ -239,7 +244,11 @@ class Package(gobject.GObject):
     @property
     def latest(self):
         """The latest representative package, based on status."""
-        if self.status in {'new'}:
+        if self.in_progress == 'installing':
+            return self.latest_upgrade
+        elif self.in_progress == 'removing':
+            return self.latest_installed
+        elif self.current_status in {'new'}:
             return self.latest_upgrade
         else:
             return self.latest_installed

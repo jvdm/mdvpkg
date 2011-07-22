@@ -215,11 +215,11 @@ class UrpmiDB(object):
         remove_names = []
         for pkg in [self._cache[na] for na in remove]:
             remove_names.append(pkg.latest_installed.__str__())
-            pkg.in_progress = True
+            pkg.in_progress = 'removing'
         install_names = []
         for pkg in [self._cache[na] for na in install]:
             install_names.append(pkg.latest_upgrade.__str__())
-            pkg.in_progress = True
+            pkg.in_progress = 'installing'
         return self._runner.push(self,
                                  mdvpkg.urpmi.task.ROLE_COMMIT,
                                  (install_names,remove_names))
@@ -349,7 +349,7 @@ class UrpmiDB(object):
 
     def on_install_end(self, task_id, name, arch, evrd):
         package = self._cache[(name, arch)]
-        package.in_progress = False
+        package.in_progress = None
         package.on_install(eval(evrd))
 
     def on_install_progress(self, task_id, name, arch, amount, total):
@@ -362,7 +362,7 @@ class UrpmiDB(object):
 
     def on_remove_end(self, task_id, name, arch, evrd):
         package = self._cache[(name, arch)]
-        package.in_progress = False
+        package.in_progress = None
         package.on_remove(eval(evrd))
 
     def on_remove_progress(self, task_id, name, arch, amount, total):
