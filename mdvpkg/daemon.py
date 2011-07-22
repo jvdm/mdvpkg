@@ -352,7 +352,7 @@ class DBusPackageList(PackageList, dbus.service.Object):
     @dbus.service.signal(dbus_interface=mdvpkg.PACKAGE_LIST_IFACE,
                          signature='suss')
     def RemoveProgress(self, task_id, index, amount, total):
-        log.debug('RemoveProgress(%s, %s) called', index, progress)
+        log.debug('RemoveProgress(%s, %s) called', index, amount)
 
 
     def on_delete(self):
