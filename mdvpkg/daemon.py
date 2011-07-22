@@ -431,21 +431,21 @@ class DBusPackageList(PackageList, dbus.service.Object):
     def _on_preparing(self, task_id, total):
         self.Preparing(task_id, total)
 
-    def _on_remove_start(self, task_id, package):
+    def _on_remove_start(self, task_id, package, total, count):
         try:
             index = self._names.index(package.na)
         except ValueError:
             pass
         else:
-            self.RemoveStart(task_id, index)
+            self.RemoveStart(task_id, index, total, count)
 
-    def _on_remove_progress(self, task_id, package, progress):
+    def _on_remove_progress(self, task_id, package, amount, total):
         try:
             index = self._names.index(package.na)
         except ValueError:
             pass
         else:
-            self.RemoveProgress(task_id, index, progress)
+            self.RemoveProgress(task_id, index, amount, total)
 
 def run():
     """Run the mdvpkg daemon from command line."""
