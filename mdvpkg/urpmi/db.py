@@ -511,6 +511,14 @@ class PackageList(object):
             raise ValueError('no action was selected')
         return self._urpmi.run_task(install=installs, remove=removes)
 
+    def get_medias(self):
+        """Return the list of medias of filtered packages."""
+        return self._count_medias(self._names)
+
+    def get_medias(self):
+        """Return the list of medias of filtered packages."""
+        return self._count_medias(self._items.iterkeys())
+
     def get_groups(self):
         """Return the dict of package groups and package count in
         the filtered list.
@@ -522,6 +530,12 @@ class PackageList(object):
         unfiltered list.
         """
         return self._count_groups(self._items.iterkeys())
+
+    def _count_medias(self, na_iter):
+        medias = set()
+        for na in na_iter:
+            medias.add(self._urpmi.get_package(na).latest.media)
+        return medias
 
     def _count_groups(self, na_iter):
         groups_dict = {}
