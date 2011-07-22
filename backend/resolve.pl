@@ -86,7 +86,7 @@ MAIN: {
     {
 	my $disttag = $state->{rejected}{$_}{disttag} || '';
 	my $distepoch = $state->{rejected}{$_}{distepoch} || '';
-	s/-$disttag$distepoch//;
+	s/-$disttag$distepoch// if ($disttag and $distepoch);
 	my $name;
 	my $arch;
 	($name, undef, undef, $arch) = /^(.+)-([^-]+)-([^-].*)\.(.+)$/;
