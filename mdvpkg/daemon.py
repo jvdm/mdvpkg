@@ -345,13 +345,13 @@ class DBusPackageList(PackageList, dbus.service.Object):
         log.debug('InstallProgress(%s, %s) called', index, amount)
 
     @dbus.service.signal(dbus_interface=mdvpkg.PACKAGE_LIST_IFACE,
-                         signature='su')
-    def RemoveStart(self, task_id, index):
+                         signature='suss')
+    def RemoveStart(self, task_id, index, total, count):
         log.debug('RemoveStart(%s) called', index)
 
     @dbus.service.signal(dbus_interface=mdvpkg.PACKAGE_LIST_IFACE,
-                         signature='sus')
-    def RemoveProgress(self, task_id, index, progress):
+                         signature='suss')
+    def RemoveProgress(self, task_id, index, amount, total):
         log.debug('RemoveProgress(%s, %s) called', index, progress)
 
 

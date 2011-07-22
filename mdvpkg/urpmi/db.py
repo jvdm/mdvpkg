@@ -356,18 +356,18 @@ class UrpmiDB(object):
         package = self._cache[(name, arch)]
         self.emit('install-progress', task_id, package, amount, total)
 
-    def on_remove_start(self, task_id, name, arch):
+    def on_remove_start(self, task_id, name, arch, total, count):
         package = self._cache[(name, arch)]
-        self.emit('remove-start', task_id, package)
+        self.emit('remove-start', task_id, package, total, count)
 
     def on_remove_end(self, task_id, name, arch, evrd):
         package = self._cache[(name, arch)]
         package.in_progress = False
         package.on_remove(eval(evrd))
 
-    def on_remove_progress(self, task_id, name, arch, progress):
+    def on_remove_progress(self, task_id, name, arch, amount, total):
         package = self._cache[(name, arch)]
-        self.emit('remove-progress', task_id, package, progress)
+        self.emit('remove-progress', task_id, package, amount, total)
 
 
 ACTION_NO_ACTION = 'action-no-action'
@@ -623,8 +623,8 @@ class PackageList(object):
     def _on_preparing(self, task_id, total):
         pass
 
-    def _on_remove_start(self, task_id, package):
+    def _on_remove_start(self, task_id, package, total, count):
         pass
 
-    def _on_remove_progress(self, task_id, package, progress):
+    def _on_remove_progress(self, task_id, package, amount, total):
         pass

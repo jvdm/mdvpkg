@@ -236,6 +236,7 @@ sub on_task__commit {
 	          + @$to_remove);                       # number of removes
 
     # Remove packages ...
+    my $remove_count = @$to_remove;
     urpm::install::install(
 	$urpm,
 	$to_remove,
@@ -246,9 +247,9 @@ sub on_task__commit {
 	    my $pkg = $pkg_map{$return[-1]};
 	    my $evrd = get_evrd($pkg);
 	    response('callback', 'remove_start',
-		     $pkg->name, $pkg->arch);
+		     $pkg->name, $pkg->arch, 100, $remove_count);
 	    response('callback', 'remove_progress',
-		     $pkg->name, $pkg->arch, 100);
+		     $pkg->name, $pkg->arch, 100, 100);
 	    response('callback', 'remove_end',
 		     $pkg->name, $pkg->arch, $evrd);
 	    progress(1);
