@@ -515,7 +515,7 @@ class PackageList(object):
         """Return the list of medias of filtered packages."""
         return self._count_medias(self._names)
 
-    def get_medias(self):
+    def get_all_medias(self):
         """Return the list of medias of filtered packages."""
         return self._count_medias(self._items.iterkeys())
 
