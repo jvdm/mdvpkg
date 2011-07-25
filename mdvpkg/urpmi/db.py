@@ -614,7 +614,7 @@ class PackageList(object):
 
     def _name_match_func(self, na, matches):
         for name in matches:
-            if self._urpmi.get_package(na).name.startswith(name):
+            if re.match(name, self._urpmi.get_package(na).name):
                 return True
         return False
 
