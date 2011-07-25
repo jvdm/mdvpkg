@@ -222,7 +222,7 @@ class UrpmiDB(object):
             install_names.append(pkg.latest_upgrade.__str__())
         return self._runner.push(self,
                                  mdvpkg.urpmi.task.ROLE_COMMIT,
-                                 (install_names,remove_names))
+                                 (install_names, remove_names))
 
     def _load_installed_packages(self):
         """Visit rpmdb and load data from installed packages."""
@@ -391,6 +391,7 @@ class PackageList(object):
         self._transaction = None
         # Connect urpmi signals ...
         self._handlers = []
+        self._tasks = {}
 
     def __len__(self):
         return len(self._names)
@@ -418,6 +419,8 @@ class PackageList(object):
                  'remove-start': self._on_remove_start,
                  'remove-progress': self._on_remove_progress,
                  'package-changed': self._on_package_changed,
+                 'task-running': self._on_task_running,
+                 'task-progress': self._on_task_progress,
                  'preparing': self._on_preparing,}.iteritems():
             handler = self._urpmi.connect(signal, callback)
             self._handlers.append(handler)
@@ -517,16 +520,28 @@ class PackageList(object):
                 removes.append(na)
             elif item['action'] == ACTION_AUTO_REMOVE:
                 auto_removes.append(na)
+            item['action'] = ACTION_NO_ACTION
+
         if not installs and not removes:
             raise ValueError('no action was selected')
+
+        task_id = self._urpmi.run_task(install=installs, remove=removes)
+
+        # Save which packages are going to be modified in this task so
+        # we can update in_progress later, when the task is runned ...
+        self._tasks[task_id] = {}
         for in_progress, na_list in zip(['installing', 'installing',
                                              'removing', 'removing'],
                                         [installs, auto_installs,
                                              removes, auto_removes]):
-            for pkg in [self._urpmi.get_package(na) for na in na_list]:
-                pkg.in_progress = in_progress
+            for na in na_list:
+                l = self._tasks[task_id].get(in_progress)
+                if l is None:
+                    l = []
+                    self._tasks[task_id][in_progress] = l
+                l.append(na)
         self._sort_and_filter()
-        return self._urpmi.run_task(install=installs, remove=removes)
+        return task_id
 
     def get_medias(self):
         """Return the list of medias of filtered packages."""
@@ -664,3 +679,13 @@ class PackageList(object):
 
     def _on_package_changed(self):
         self._sort_and_filter()
+
+    def _on_task_running(self, task_id):
+        task = self._tasks[task_id]
+        for in_progress in {'installing', 'removing'}:
+            for na in task.get(in_progress, []):
+                self._urpmi.get_package(na).in_progress = in_progress
+
+    def _on_task_progress(self, task_id, count, total):
+        if count == total:
+            del self._tasks[task_id]
