@@ -326,6 +326,11 @@ class Package(gobject.GObject):
 
     def on_install(self, evrd):
         """React to the installation event of a upgrade evrd."""
+        if self.in_progress != 'installing':
+            msg = 'not installing package: %s %s' % (self.na, evrd)
+            raise ValueError, msg
+        log.debug('%s-%s installed', self.na, evrd)
+        self.in_progress = None
         evrd = RpmEVRD(evrd)
         version = self._versions.get(evrd)
         if version is None:
@@ -333,13 +338,20 @@ class Package(gobject.GObject):
         self._set_latest_installed(version['rpm'])
         self._set_type(version, 'installed')
 
+
     def on_remove(self, evrd):
         """React to the removal of an installed evrd."""
+        if self.in_progress != 'removing':
+            msg = 'not removing package: %s %s' % (self.na, evrd)
+            raise ValueError, msg
+        log.debug('%s-%s removed', self.na, evrd)
+        self.in_progress = None
         evrd = RpmEVRD(evrd)
         version = self._versions.get(evrd)
         if version is None:
             raise ValueError, 'not version of %s: %s' % (self.na, evrd)
         self._set_type(version, 'upgrade')
+
 
     def _set_latest_installed(self, rpm):
         if not self.has_installs or rpm > self.latest_installed:
@@ -357,7 +369,8 @@ class Package(gobject.GObject):
 
     def _latest_by_type(self, type):
         """Return the latest package of specified type."""
-        return self._versions[sorted(self._types[type])[-1]]['rpm']
+        na = sorted(self._types[type])[-1]
+        return self._versions[na]['rpm']
 
     def _set_type(self, version_dict, type):
         rpm = version_dict['rpm']

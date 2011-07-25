@@ -353,7 +353,6 @@ class UrpmiDB(object):
 
     def on_install_end(self, task_id, name, arch, evrd):
         package = self._cache[(name, arch)]
-        package.in_progress = None
         package.on_install(eval(evrd))
         self.emit('package-changed')
 
@@ -367,7 +366,6 @@ class UrpmiDB(object):
 
     def on_remove_end(self, task_id, name, arch, evrd):
         package = self._cache[(name, arch)]
-        package.in_progress = None
         package.on_remove(eval(evrd))
         self.emit('package-changed')
 
@@ -468,14 +466,14 @@ class PackageList(object):
     def remove(self, index):
         na = self._names[index]
         if self._urpmi.get_package(na).has_installs is not True:
-            raise ValueError, '%s not installed' % na
+            raise ValueError, '%s.%s not installed'% na
         self._items[na]['action'] = ACTION_REMOVE
         self._solve()
 
     def install(self, index):
         na = self._names[index]
         if self._urpmi.get_package(na).status == 'installed':
-            raise ValueError, '%s already installed' % na
+            raise ValueError, '%s.%s already installed' % na
         self._items[na]['action'] = ACTION_INSTALL
         self._solve()
 
@@ -513,21 +511,19 @@ class PackageList(object):
             pkg = self._urpmi.get_package(na)
             if item['action'] == ACTION_INSTALL:
                 installs.append(na)
-                pkg.in_progress = 'installing'
             elif item['action'] == ACTION_AUTO_INSTALL:
-                pkg.in_progress = 'installing'
+                auto_installs.append(na)
             elif item['action'] == ACTION_REMOVE:
                 removes.append(na)
-                pkg.in_progress = 'removing'
             elif item['action'] == ACTION_AUTO_REMOVE:
-                pkg.in_progress = 'removing'
+                auto_removes.append(na)
         if not installs and not removes:
             raise ValueError('no action was selected')
         for in_progress, na_list in zip(['installing', 'installing',
                                              'removing', 'removing'],
                                         [installs, auto_installs,
                                              removes, auto_removes]):
-            for pkg in [self._urpmi.get_package(na) for na in installs]:
+            for pkg in [self._urpmi.get_package(na) for na in na_list]:
                 pkg.in_progress = in_progress
         self._sort_and_filter()
         return self._urpmi.run_task(install=installs, remove=removes)
