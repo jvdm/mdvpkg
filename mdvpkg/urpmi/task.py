@@ -39,14 +39,6 @@ STATE_RUNNING = 'state-running'
 STATE_DONE = 'state-done'
 
 
-def create_task(callback, role, args):
-    """Create a new task dict."""
-    return {'id': uuid.uuid4(),
-            'role': role,
-            'args': args,
-            'callback': callback}
-
-
 class UrpmiRunner(object):
     """Queue and controls urpmi tasks.  Some of them using urpmi
     backend.
