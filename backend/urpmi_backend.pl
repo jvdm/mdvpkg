@@ -292,8 +292,10 @@ sub on_task__commit {
 			     @na, $percent, $total, $eta, $speed);
 		}
 		elsif ($mode eq 'end') {
-		    response('callback', 'download_progress',
-			     @na, 100, 0, 0, 0);
+		    my $evrd = get_evrd($p);
+		    response('callback', 'download_end',
+			     $p->name, $p->arch,
+			     $evrd);
 		    progress(1);
 		}
 		elsif ($mode eq 'error') {

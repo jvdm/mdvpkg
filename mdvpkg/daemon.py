@@ -424,9 +424,6 @@ class DBusPackageList(PackageList, dbus.service.Object):
             pass
         else:
             self.InstallProgress(task_id, index, amount, total)
-        PackageList._on_install_progress(
-            self, task_id, package, amount, total
-        )
 
     def _on_preparing(self, task_id, total):
         self.Preparing(task_id, total)

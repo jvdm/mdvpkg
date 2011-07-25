@@ -81,12 +81,14 @@ class UrpmiDB(object):
         self._runner = mdvpkg.urpmi.task.UrpmiRunner(self.backend_dir)
         self._signals = {'download-start': [],
                          'download-progress': [],
+                         'download-end': [],
                          'download-error': [],
                          'install-start': [],
                          'install-progress': [],
                          'remove-start': [],
                          'remove-progress': [],
                          'preparing': [],
+                         'package-changed': [],
                          'task-queued': [],
                          'task-running': [],
                          'task-progress': [],
@@ -220,6 +222,7 @@ class UrpmiDB(object):
         for pkg in [self._cache[na] for na in install]:
             install_names.append(pkg.latest_upgrade.__str__())
             pkg.in_progress = 'installing'
+        self.emit('package-changed')
         return self._runner.push(self,
                                  mdvpkg.urpmi.task.ROLE_COMMIT,
                                  (install_names,remove_names))
@@ -336,9 +339,9 @@ class UrpmiDB(object):
         self.emit('download-progress',
                   task_id, package, percent, total, eta, speed)
 
-    def on_download_error(self, task_id, name, arch, message):
+    def on_download_end(self, task_id, name, arch, evrd):
         package = self._cache[(name, arch)]
-        self.emit('download-error', task_id, package, message)
+        self.emit('download-end', task_id, package)
 
     def on_preparing(self, task_id, total):
         self.emit('preparing', task_id, total)
@@ -347,27 +350,29 @@ class UrpmiDB(object):
         package = self._cache[(name, arch)]
         self.emit('install-start', task_id, package, total, count)
 
+    def on_install_progress(self, task_id, name, arch, amount, total):
+        package = self._cache[(name, arch)]
+        self.emit('install-progress', task_id, package, amount, total)
+
     def on_install_end(self, task_id, name, arch, evrd):
         package = self._cache[(name, arch)]
         package.in_progress = None
         package.on_install(eval(evrd))
-
-    def on_install_progress(self, task_id, name, arch, amount, total):
-        package = self._cache[(name, arch)]
-        self.emit('install-progress', task_id, package, amount, total)
+        self.emit('package-changed')
 
     def on_remove_start(self, task_id, name, arch, total, count):
         package = self._cache[(name, arch)]
         self.emit('remove-start', task_id, package, total, count)
 
+    def on_remove_progress(self, task_id, name, arch, amount, total):
+        package = self._cache[(name, arch)]
+        self.emit('remove-progress', task_id, package, amount, total)
+
     def on_remove_end(self, task_id, name, arch, evrd):
         package = self._cache[(name, arch)]
         package.in_progress = None
         package.on_remove(eval(evrd))
-
-    def on_remove_progress(self, task_id, name, arch, amount, total):
-        package = self._cache[(name, arch)]
-        self.emit('remove-progress', task_id, package, amount, total)
+        self.emit('package-changed')
 
 
 ACTION_NO_ACTION = 'action-no-action'
@@ -385,7 +390,7 @@ class PackageList(object):
         self._items = {}
         self._names = []
         self._filters = {}
-        self.filter_names = {'name', 'group','status', 'media', 'action'}
+        self.filter_names = {'name', 'group', 'status', 'media', 'action'}
         self._reverse = False
         # urpmi transaction to perform actions ...
         self._transaction = None
@@ -411,11 +416,13 @@ class PackageList(object):
         for signal, callback in \
                 {'download-start': self._on_download_start,
                  'download-progress': self._on_download_progress,
-                 'download-error': self._on_download_progress,
+                 'download-error': self._on_download_error,
+                 'download-end': self._on_download_end,
                  'install-start': self._on_install_start,
                  'install-progress': self._on_install_progress,
                  'remove-start': self._on_remove_start,
                  'remove-progress': self._on_remove_progress,
+                 'package-changed': self._on_package_changed,
                  'preparing': self._on_preparing,}.iteritems():
             handler = self._urpmi.connect(signal, callback)
             self._handlers.append(handler)
@@ -493,9 +500,10 @@ class PackageList(object):
                                  installs=installs,
                                  removes=removes
                              ).iteritems():
-            for na in names:
+             for na in names:
                 log.debug('action changed for %s: %s', na, action)
                 self._items[na]['action'] = action
+        self._sort_and_filter()
 
     def process_actions(self):
         """Process the selected actions and their dependencies.
@@ -627,12 +635,14 @@ class PackageList(object):
     def _on_download_error(self, task_id, package, message):
         pass
 
+    def _on_download_end(self, task_id, package):
+        pass
+
     def _on_install_start(self, task_id, package, total, count):
         pass
 
     def _on_install_progress(self, task_id, package, amount, total):
-        if amount == total:
-            self._items[package.na]['action'] = ACTION_NO_ACTION
+        pass
 
     def _on_preparing(self, task_id, total):
         pass
@@ -642,3 +652,6 @@ class PackageList(object):
 
     def _on_remove_progress(self, task_id, package, amount, total):
         pass
+
+    def _on_package_changed(self):
+        self._sort_and_filter()
