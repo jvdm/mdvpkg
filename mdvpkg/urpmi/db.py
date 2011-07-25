@@ -467,6 +467,8 @@ class PackageList(object):
         na = self._names[index]
         if self._urpmi.get_package(na).has_installs is not True:
             raise ValueError, '%s.%s not installed'% na
+        elif pkg.in_progress is not None:
+            raise PackageInProgressConflict
         self._items[na]['action'] = ACTION_REMOVE
         self._solve()
 
@@ -474,6 +476,8 @@ class PackageList(object):
         na = self._names[index]
         if self._urpmi.get_package(na).status == 'installed':
             raise ValueError, '%s.%s already installed' % na
+        elif pkg.in_progress is not None:
+            raise PackageInProgressConflict
         self._items[na]['action'] = ACTION_INSTALL
         self._solve()
 

@@ -46,3 +46,6 @@ class TaskBadState(MdvPkgError):
 
 class AuthorizationFailed(MdvPkgError):
     pass
+
+class PackageInProgressConflict(MdvPkgError):
+    pass
