@@ -217,12 +217,9 @@ class UrpmiDB(object):
         remove_names = []
         for pkg in [self._cache[na] for na in remove]:
             remove_names.append(pkg.latest_installed.__str__())
-            pkg.in_progress = 'removing'
         install_names = []
         for pkg in [self._cache[na] for na in install]:
             install_names.append(pkg.latest_upgrade.__str__())
-            pkg.in_progress = 'installing'
-        self.emit('package-changed')
         return self._runner.push(self,
                                  mdvpkg.urpmi.task.ROLE_COMMIT,
                                  (install_names,remove_names))
@@ -509,14 +506,30 @@ class PackageList(object):
         """Process the selected actions and their dependencies.
         """
         installs = []
+        auto_installs = []
         removes = []
+        auto_removes = []
         for na, item in self._items.iteritems():
+            pkg = self._urpmi.get_package(na)
             if item['action'] == ACTION_INSTALL:
                 installs.append(na)
+                pkg.in_progress = 'installing'
+            elif item['action'] == ACTION_AUTO_INSTALL:
+                pkg.in_progress = 'installing'
             elif item['action'] == ACTION_REMOVE:
                 removes.append(na)
+                pkg.in_progress = 'removing'
+            elif item['action'] == ACTION_AUTO_REMOVE:
+                pkg.in_progress = 'removing'
         if not installs and not removes:
             raise ValueError('no action was selected')
+        for in_progress, na_list in zip(['installing', 'installing',
+                                             'removing', 'removing'],
+                                        [installs, auto_installs,
+                                             removes, auto_removes]):
+            for pkg in [self._urpmi.get_package(na) for na in installs]:
+                pkg.in_progress = in_progress
+        self._sort_and_filter()
         return self._urpmi.run_task(install=installs, remove=removes)
 
     def get_medias(self):

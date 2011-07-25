@@ -192,7 +192,7 @@ class Package(gobject.GObject):
     def status(self):
         """Package entry status."""
         if self.in_progress is not None:
-            return 'in-progress'
+            return self.in_progress
         return self.current_status
 
     @property
