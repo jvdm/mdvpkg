@@ -336,8 +336,9 @@ sub on_task__commit {
 		}
 	    },
 	    ask_yes_or_no => sub {
-		response('callback', 'ask');
-		return <> =~ /|Y|y|Yes|yes|true|True|/;
+		# response('callback', 'ask');
+		# return <> =~ /|Y|y|Yes|yes|true|True|/;
+		return 1;
 	    },
 	    message => sub {
 		my ($title, $message) = @_;
