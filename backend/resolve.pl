@@ -107,6 +107,14 @@ sub response_action {
 
 }
 
+sub response_error {
+    my ($name, @args) = @_;
+	printf("%%MDVPKG ERROR %s\n",
+	       $name,
+	       join("\t", @args));
+
+}
+
 ######################################################################
 # TODO Replicated code from urpmi_backend
 ######################################################################
@@ -127,12 +135,12 @@ sub _get_state {
 			$removals,
 			callback_notfound => sub {
 			    shift;
-			    response('error', 'error-not-found', @_);
+			    response_error('error-not-found', @_);
 			    return;
 			},
 			callback_base => sub {
 			    shift;
-			    response('error', 'error-remove-base', @_);
+			    response_error('error-remove-base', @_);
 			    return;
 		    }) or do {
 			return;
