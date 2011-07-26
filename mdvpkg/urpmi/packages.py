@@ -179,6 +179,7 @@ class Package(gobject.GObject):
                        'upgrade': [],
                        'downgrade': []}
         self.in_progress = None
+        self.progress = None
 
     @property
     def name(self):

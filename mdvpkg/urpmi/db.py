@@ -204,7 +204,7 @@ class UrpmiDB(object):
                     na = tuple(fields[3].split('@'))
                     if self._cache[na].in_progress is not None:
                         raise PackageInProgressConflict
-                    selected[fields[2]].append()
+                    selected[fields[2]].append(na)
         return selected
 
     def auto_select(self):
@@ -331,16 +331,19 @@ class UrpmiDB(object):
 
     def on_download_start(self, task_id, name, arch):
         package = self._cache[(name, arch)]
+        package.progress = 0.0
         self.emit('download-start', task_id, package)
 
     def on_download_progress(self, task_id, name, arch, percent,
                              total, eta, speed):
         package = self._cache[(name, arch)]
+        package.progress = int(percent) / 2.0 / 100
         self.emit('download-progress',
                   task_id, package, percent, total, eta, speed)
 
     def on_download_end(self, task_id, name, arch, evrd):
         package = self._cache[(name, arch)]
+        package.progress = 0.5
         self.emit('download-end', task_id, package)
 
     def on_preparing(self, task_id, total):
@@ -348,27 +351,33 @@ class UrpmiDB(object):
 
     def on_install_start(self, task_id, name, arch, total, count):
         package = self._cache[(name, arch)]
+        package.progress = 0.5
         self.emit('install-start', task_id, package, total, count)
 
     def on_install_progress(self, task_id, name, arch, amount, total):
         package = self._cache[(name, arch)]
+        package.progress = 0.5  + (float(amount) / float(total) / 2.0)
         self.emit('install-progress', task_id, package, amount, total)
 
     def on_install_end(self, task_id, name, arch, evrd):
         package = self._cache[(name, arch)]
+        package.progress = None
         package.on_install(eval(evrd))
         self.emit('package-changed')
 
     def on_remove_start(self, task_id, name, arch, total, count):
         package = self._cache[(name, arch)]
+        package.progress = 0.0
         self.emit('remove-start', task_id, package, total, count)
 
     def on_remove_progress(self, task_id, name, arch, amount, total):
         package = self._cache[(name, arch)]
+        package.progress = 100.0
         self.emit('remove-progress', task_id, package, amount, total)
 
     def on_remove_end(self, task_id, name, arch, evrd):
         package = self._cache[(name, arch)]
+        package.progress = None
         package.on_remove(eval(evrd))
         self.emit('package-changed')
 
@@ -463,24 +472,27 @@ class PackageList(object):
                        'action': item['action'],
                        'name': package.name,
                        'arch': package.arch,
-                       'rpm': package.latest}
+                       'rpm': package.latest,
+                       'progress': package.progress}
         return return_dict
 
     def remove(self, index):
         na = self._names[index]
-        if self._urpmi.get_package(na).has_installs is not True:
-            raise ValueError, '%s.%s not installed'% na
+        pkg = self._urpmi.get_package(na)
+        if pkg.has_installs is not True:
+            raise ValueError, '%s.%s not installed' % na
         elif pkg.in_progress is not None:
-            raise PackageInProgressConflict
+            raise mdvpkg.exceptions.PackageInProgressConflict
         self._items[na]['action'] = ACTION_REMOVE
         self._solve()
 
     def install(self, index):
         na = self._names[index]
-        if self._urpmi.get_package(na).status == 'installed':
+        pkg = self._urpmi.get_package(na)
+        if pkg.status == 'installed':
             raise ValueError, '%s.%s already installed' % na
         elif pkg.in_progress is not None:
-            raise PackageInProgressConflict
+            raise mdvpkg.exceptions.PackageInProgressConflict
         self._items[na]['action'] = ACTION_INSTALL
         self._solve()
 
@@ -530,6 +542,7 @@ class PackageList(object):
                                              removes, auto_removes]):
             for pkg in [self._urpmi.get_package(na) for na in na_list]:
                 pkg.in_progress = in_progress
+                pkg.progress = 0.0
         self._sort_and_filter()
         return self._urpmi.run_task(install=installs, remove=removes)
 

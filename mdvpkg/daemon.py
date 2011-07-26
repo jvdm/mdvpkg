@@ -221,6 +221,11 @@ class DBusPackageList(PackageList, dbus.service.Object):
                 pkg_info[key] = ''
         details = {}
         for attr in attributes:
+            if attr == 'progress':
+                if pkg_info['status'] not in {'downloading', 'installing'}:
+                    raise ValueError, 'package not in progress'
+                details['progress'] = pkg_info['progress']
+                continue
             value = getattr(pkg_info['rpm'], attr)
             if value is None:
                 value = ''
