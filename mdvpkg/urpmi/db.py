@@ -500,18 +500,19 @@ class PackageList(object):
         """Select a package for installation and all it's dependencies."""
         installs = []
         removes = []
+        items_with_actions = []
         for na, item in self._items.iteritems():
             if item['action'] == ACTION_INSTALL:
                 installs.append(na)
             elif item['action'] == ACTION_REMOVE:
                 removes.append(na)
             if item['action'] != ACTION_NO_ACTION:
-                item['action'] = ACTION_NO_ACTION
-
-        for action, names in self._urpmi.resolve_deps(
-                                 installs=installs,
-                                 removes=removes
-                             ).iteritems():
+                items_with_actions.append(item)
+        action_list = self._urpmi.resolve_deps(installs=installs,
+                                               removes=removes)
+        for item in items_with_actions:
+            item['action'] = ACTION_NO_ACTION
+        for action, names in action_list.iteritems():
              for na in names:
                 log.debug('action changed for %s: %s', na, action)
                 self._items[na]['action'] = action
