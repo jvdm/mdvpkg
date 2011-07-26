@@ -201,7 +201,10 @@ class UrpmiDB(object):
                 if fields[1] == 'ERROR':
                     raise Exception,'Backend error: %s' % fields[2]
                 elif fields[1] == 'SELECTED':
-                    selected[fields[2]].append(tuple(fields[3].split('@')))
+                    na = tuple(fields[3].split('@'))
+                    if self._cache[na].in_progress is not None:
+                        raise PackageInProgressConflict
+                    selected[fields[2]].append()
         return selected
 
     def auto_select(self):
@@ -487,12 +490,10 @@ class PackageList(object):
         removes = []
         for na, item in self._items.iteritems():
             if item['action'] == ACTION_INSTALL:
-                item['action'] = ACTION_NO_ACTION
                 installs.append(na)
             elif item['action'] == ACTION_REMOVE:
-                item['action'] = ACTION_NO_ACTION
                 removes.append(na)
-            elif item['action'] != ACTION_NO_ACTION:
+            if item['action'] != ACTION_NO_ACTION:
                 item['action'] = ACTION_NO_ACTION
 
         for action, names in self._urpmi.resolve_deps(
