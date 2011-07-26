@@ -192,14 +192,14 @@ class UrpmiDB(object):
             name = self._cache[install].latest_upgrade.__str__()
             args.append(name)
         for remove in removes:
-            name = self._cache[remove].latest_installed.__str__()
-            args.append('r:' + name)
+            args.append('r:' + remove[0])
         backend.stdin.write('%s\n' % '\t'.join(args))
         for line in backend.communicate()[0].split('\n'):
             fields = line.split()
             if fields and fields[0] == '%MDVPKG':
                 if fields[1] == 'ERROR':
-                    raise Exception,'Backend error: %s' % fields[2]
+                    msg = 'Backend error: %s' % ''.join(fields[2:])
+                    raise mdvpkg.exception.MdvPkgError, msg
                 elif fields[1] == 'SELECTED':
                     na = tuple(fields[3].split('@'))
                     if self._cache[na].in_progress is not None:
