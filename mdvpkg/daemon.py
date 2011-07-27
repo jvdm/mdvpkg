@@ -268,23 +268,25 @@ class DBusPackageList(PackageList, dbus.service.Object):
 
     @dbus.service.method(mdvpkg.PACKAGE_LIST_IFACE,
                            in_signature='u',
-                           out_signature='',
+                           out_signature='a(ss)a(ss)',
                            sender_keyword='sender',
                            connection_keyword='connection')
     def Install(self, index, sender, connection):
         """Mark a package and its dependencies for installation."""
         log.debug('Install(%s) called', index)
         self.install(index)
+        return self._get_packages_with_action()
 
     @dbus.service.method(mdvpkg.PACKAGE_LIST_IFACE,
                            in_signature='u',
-                           out_signature='',
+                           out_signature='a(ss)a(ss)',
                            sender_keyword='sender',
                            connection_keyword='connection')
     def Remove(self, index, sender, connection):
         """Mark a package and its dependencies for removal."""
         log.debug('Remove(%s) called', index)
         self.remove(index)
+        return self._get_packages_with_action()
 
     @dbus.service.method(mdvpkg.PACKAGE_LIST_IFACE,
                          in_signature='',
@@ -369,6 +371,18 @@ class DBusPackageList(PackageList, dbus.service.Object):
         # TODO Disconnect all signals, otherwise the reference will
         #      persist.
         log.info('package list deleted: %s', self.path)
+
+    def _get_packages_with_action(self):
+        installs = []
+        removes = []
+        for na, item in self._items.iteritems():
+            if item['action'] in {mdvpkg.urpmi.db.ACTION_INSTALL,
+                                  mdvpkg.urpmi.db.ACTION_AUTO_INSTALL}:
+                installs.append(na)
+            elif item['action'] in {mdvpkg.urpmi.db.ACTION_REMOVE,
+                                    mdvpkg.urpmi.db.ACTION_AUTO_REMOVE}:
+                removes.append(na)
+        return installs, removes
 
     def _check_owner(self, sender):
         """Check if the sender is the list owner, the one who created
