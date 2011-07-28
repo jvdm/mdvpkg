@@ -274,6 +274,7 @@ class DBusPackageList(PackageList, dbus.service.Object):
     def Install(self, index, sender, connection):
         """Mark a package and its dependencies for installation."""
         log.debug('Install(%s) called', index)
+        self._check_owner(sender)
         self.install(index)
         return self._get_packages_with_action()
 
@@ -285,8 +286,19 @@ class DBusPackageList(PackageList, dbus.service.Object):
     def Remove(self, index, sender, connection):
         """Mark a package and its dependencies for removal."""
         log.debug('Remove(%s) called', index)
+        self._check_owner(sender)
         self.remove(index)
         return self._get_packages_with_action()
+
+    @dbus.service.method(mdvpkg.PACKAGE_LIST_IFACE,
+                         in_signature='u',
+                         out_signature='',
+                         sender_keyword='sender')
+    def NoAction(self, index, sender):
+        """Unmark a package for installation or removal."""
+        log.debug('NoAction(%s) called', index)
+        self._check_owner(sender)
+        self.no_action(index)
 
     @dbus.service.method(mdvpkg.PACKAGE_LIST_IFACE,
                          in_signature='',

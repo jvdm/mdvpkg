@@ -35,6 +35,7 @@ import os.path
 
 import mdvpkg
 import mdvpkg.urpmi.task
+import mdvpkg.exceptions
 from mdvpkg.urpmi.media import UrpmiMedia
 from mdvpkg.urpmi.packages import RpmPackage
 from mdvpkg.urpmi.packages import Package
@@ -494,6 +495,15 @@ class PackageList(object):
         elif pkg.in_progress is not None:
             raise mdvpkg.exceptions.PackageInProgressConflict
         self._items[na]['action'] = ACTION_INSTALL
+        self._solve()
+
+    def no_action(self, index):
+        na = self._names[index]
+        item = self._items[na]
+        if item['action'] in {ACTION_AUTO_INSTALL, ACTION_AUTO_REMOVE}:
+            msg = 'package is required for action: %s' % item['action']
+            raise mdvpkg.exceptions.MdvPkgError, msg
+        item['action'] = ACTION_NO_ACTION
         self._solve()
 
     def _solve(self):
