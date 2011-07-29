@@ -23,6 +23,7 @@
 """Class to represent and manipulate the urpmi db."""
 
 
+import os
 import os.path
 import subprocess
 import re
@@ -44,6 +45,122 @@ from mdvpkg.urpmi.packages import Package
 log = logging.getLogger('mdvpkgd.urpmi')
 
 
+def expand_line(line):
+    """Look for $HOST, $ARCH and $RELEASE to expand."""
+    _, host, _, _, arch = os.uname()
+    release = ''
+    with open('/etc/release') as f:
+        m = re.search('release (\d+\.\d+).*for (\w+)', f.read())
+        if m is not None:
+            release, _arch = m.groups()
+            if _arch:
+                arch = _arch
+            if re.match('cooker', release):
+                release = 'cooker'
+    for name, value in {'HOST': host,
+                        'ARCH': arch,
+                        'RELEASE': release}.items():
+        line = line.replace('$%s' % name, value)
+    return line
+
+
+def parse_configuration(conf_path):
+    """Parse urpmi configuration file at conf_path and return its data
+    in a tuple."""
+    with open(conf_path, 'r') as conf_file:
+        lines = conf_file.readlines()
+    medias = []
+    temp_block = None
+    global_block = None
+    for line in lines:
+        line = line.strip()
+        if not line or re.match('\s*#', line):
+            continue
+        line = expand_line(line)
+        if temp_block is None:
+            m = re.search('^(.*?[^\\\])\s+(?:(.*?[^\\\])\s+)?{$', line)
+            if m is not None:
+                name, url = m.groups()
+                name = re.sub('\\\(\s)', '\\1', name)
+                if name in [media['name'] for media in medias]:
+                    msg = 'configuration file: duplicated ' \
+                          'definition: %s' % name
+                    raise ValueError, msg
+                temp_block = {'name': name}
+                if url:
+                    temp_block['url'] = url
+            elif line == '{':
+                if global_block is not None:
+                    # found two global blocks:
+                    raise Exception, 'syntax error'
+                temp_block = {'name': None}  # global block -> name = None
+        else:
+            if line.endswith('{'):
+                # nested block definition:
+                raise Exception, 'syntax error'
+            if line.endswith('}'):
+                if temp_block['name'] is None:
+                    del temp_block['name']
+                    global_block = temp_block
+                else:
+                    medias.append(temp_block)
+                temp_block = None
+                continue
+
+            # Ignored, kept for compatibility ...
+            if line in {'modified', 'hdlist', 'synthesis'}:
+                continue
+
+            # Check for key-ids ...
+            m = re.match('^key[-_]ids\s*:\s*[\'"]?(.*?)[\'"]?$', line)
+            if m is not None:
+                temp_block['key-ids'] = m.group(1)
+                continue
+
+            # Positive only fields ...
+            m = re.match('(update|ignore|synthesis|noreconfigure'
+                             '|no-suggests|no-media-info|static'
+                             '|virtual|disable-certificate-check)',
+                         line)
+            if m is not None:
+                temp_block[m.group(1)] = True
+                continue
+
+            m = re.match('^(hdlist|list|with_hdlist|with_synthesis'
+                             '|with-dir|mirrorlist|media_info_dir'
+                             '|removable|md5sum|limit-rate'
+                             '|nb-of-new-unrequested-pkgs-between'
+                             '-auto-select-orphans-check|xml-info'
+                             '|excludepath|split-(?:level|length)'
+                             '|priority-upgrade|prohibit-remove'
+                             '|downloader|retry|default-media'
+                             '|(?:curl|rsync|wget|prozilla|aria2)'
+                             '-options)\s*:\s*[\'"]?(.*?)[\'"]?$',
+                         line)
+            if m:
+                temp_block[m.group(1)] = m.group(2)
+                continue
+
+            m = re.match('^(no-)?(verify-rpm|norebuild|fuzzy'
+                         '|allow-(?:force|nodeps)'
+                         '|(?:pre|post)-clean|excludedocs|compress'
+                         '|keep|ignoresize|auto|repackage'
+                         '|strict-arch|nopubkey|resume)'
+                         '(?:\s*:\s*(.*))?$',
+                         line)
+            if m is not None:
+                no, key, value = m.groups()
+                if value in {'yes', 'on', '1'}:
+                    temp_block[key] = not bool(no)
+                else:
+                    temp_block[key] = bool(no)
+                continue
+
+            # unknown flag or property
+            raise Exception, 'syntax error: %s' % line
+    return global_block, medias
+
+
 class UrpmiDB(object):
     """Provide access to the urpmi database of medias and packages."""
 
@@ -62,7 +179,8 @@ class UrpmiDB(object):
         else:
             self.backend_dir = backend_dir
         self._cache = {}  # package cache with data read from medias
-        self._medias = {}
+        self._medias = None
+        self._conf = None
 
         ## Set up inotify for changes in configuration file, use
         ## gobject.io_add_watch() for new inotify events ...
@@ -119,38 +237,14 @@ class UrpmiDB(object):
         """Read configuration file, locate and populate the list of
         configured medias.
         """
-        media_r = re.compile('^(.*) {([\s\S]*?)\s*}', re.MULTILINE)
-        ignore_r = re.compile('.*(ignore).*')
-        update_r = re.compile('.*(update).*')
-        key_r = re.compile('.*key-ids:\s* (.*).*')
-        url_r = re.compile('(.*) (.*://.*|/.*$)')
         log.debug('reading %s to list medias', self._conf_path)
+        self._config, media_blocks = parse_configuration(self._conf_path)
         self._medias = {}
-        with open(self._conf_path, 'r') as fd:
-            data = fd.read()
-            res = media_r.findall(data)
-            for media, values in res:
-                res2 = url_r.findall(media)
-                if res2:
-                    # found a media with url, fixing:
-                    name, url = res2[0]
-                    media = name
-                media = media.replace('\\', '')
-                media = media.strip()
-                key = ''
-                ignore = False
-                update = False
-                keys = key_r.findall(values)
-                if keys:
-                    key = keys[0]
-                if ignore_r.search(values):
-                    ignore = True
-                if update_r.search(values):
-                    update = True
-                media = UrpmiMedia(media, update, ignore,
-                                   data_dir=self._data_dir,
-                                   key=key)
-                self._medias[media.name] = media
+        for media in media_blocks:
+            self._medias[media['name']] \
+                = UrpmiMedia(media['name'],
+                             media,
+                             data_dir=self._data_dir)
 
     def list_active_medias(self):
         """Return a list of active configured medias objects."""

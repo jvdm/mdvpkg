@@ -32,14 +32,15 @@ import gobject
 class UrpmiMedia(gobject.GObject):
     """Provide access to a urpmi media data."""
 
-    def __init__(self, name, update, ignore,
+    def __init__(self, name, mediadict,
                  data_dir='/var/lib/urpmi',
                  key='',
                  compressed=True):
         self.name = name
-        self.ignore = ignore
-        self.update = update
-        self.key = key
+        self.ignore = mediadict.get('ignore', False)
+        self.update = mediadict.get('update', False)
+        self.key_ids = mediadict.get('keys-ids', '')
+        self.url = mediadict['url']
         if compressed:
             self._open = gzip.open
         else:
