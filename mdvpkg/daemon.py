@@ -340,12 +340,12 @@ class DBusPackageList(PackageList, dbus.service.Object):
         log.debug('Error(%s, %s) called', code, message)
 
     @dbus.service.signal(dbus_interface=mdvpkg.PACKAGE_LIST_IFACE,
-                         signature='su')
+                         signature='sv')
     def DownloadStart(self, task_id, index):
         log.debug('DownloadStart(%s) called', index)
 
     @dbus.service.signal(dbus_interface=mdvpkg.PACKAGE_LIST_IFACE,
-                         signature='sussss')
+                         signature='svssss')
     def DownloadProgress(self, task_id, index, percent, total, eta, speed):
         log.debug('DownloadProgress(%s, %s) called', index, percent)
 
@@ -355,22 +355,22 @@ class DBusPackageList(PackageList, dbus.service.Object):
         log.debug('Preparing(%s) called', total)
 
     @dbus.service.signal(dbus_interface=mdvpkg.PACKAGE_LIST_IFACE,
-                         signature='suss')
+                         signature='svss')
     def InstallStart(self, task_id, index, total, count):
         log.debug('InstallStart(%s, %s) called', index, total)
 
     @dbus.service.signal(dbus_interface=mdvpkg.PACKAGE_LIST_IFACE,
-                         signature='suss')
+                         signature='svss')
     def InstallProgress(self, task_id, index, amount, total):
         log.debug('InstallProgress(%s, %s) called', index, amount)
 
     @dbus.service.signal(dbus_interface=mdvpkg.PACKAGE_LIST_IFACE,
-                         signature='suss')
+                         signature='svss')
     def RemoveStart(self, task_id, index, total, count):
         log.debug('RemoveStart(%s) called', index)
 
     @dbus.service.signal(dbus_interface=mdvpkg.PACKAGE_LIST_IFACE,
-                         signature='suss')
+                         signature='svss')
     def RemoveProgress(self, task_id, index, amount, total):
         log.debug('RemoveProgress(%s, %s) called', index, amount)
 
@@ -423,20 +423,18 @@ class DBusPackageList(PackageList, dbus.service.Object):
         try:
             index = self._names.index(package.na)
         except ValueError:
-            pass
-        else:
-            self.DownloadStart(task_id, index)
+            index = package.latest.nvra
+        self.DownloadStart(task_id, index)
 
     def _on_download_progress(self, task_id, package, percent,
                               total, eta, speed):
         try:
             index = self._names.index(package.na)
         except ValueError:
-            pass
-        else:
-            self.DownloadProgress(
-                task_id, index, percent, total, eta, speed
-            )
+            index = package.latest.nvra
+        self.DownloadProgress(
+            task_id, index, percent, total, eta, speed
+        )
 
     def _on_download_error(self, package, message):
         self.Error('download-error', message)
@@ -445,17 +443,15 @@ class DBusPackageList(PackageList, dbus.service.Object):
         try:
             index = self._names.index(package.na)
         except ValueError:
-            pass
-        else:
-            self.InstallStart(task_id, index, total, count)
+            index = package.latest.nvra
+        self.InstallStart(task_id, index, total, count)
 
     def _on_install_progress(self, task_id, package, amount, total):
         try:
             index = self._names.index(package.na)
         except ValueError:
-            pass
-        else:
-            self.InstallProgress(task_id, index, amount, total)
+            index = package.latest.nvra
+        self.InstallProgress(task_id, index, amount, total)
 
     def _on_preparing(self, task_id, total):
         self.Preparing(task_id, total)
@@ -464,17 +460,15 @@ class DBusPackageList(PackageList, dbus.service.Object):
         try:
             index = self._names.index(package.na)
         except ValueError:
-            pass
-        else:
-            self.RemoveStart(task_id, index, total, count)
+            index = package.latest.nvra
+        self.RemoveStart(task_id, index, total, count)
 
     def _on_remove_progress(self, task_id, package, amount, total):
         try:
             index = self._names.index(package.na)
         except ValueError:
-            pass
-        else:
-            self.RemoveProgress(task_id, index, amount, total)
+            index = package.latest.nvra
+        self.RemoveProgress(task_id, index, amount, total)
 
 def run():
     """Run the mdvpkg daemon from command line."""

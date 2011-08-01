@@ -100,6 +100,10 @@ class RpmPackage(object):
         return (self.name, self.arch)
 
     @property
+    def nvra(self):
+        return self.name, self.version, self.release, self.arch
+
+    @property
     def denvra(self):
         return (self.distepoch, self.disttag, self.epoch,
                 self.name, self.version, self.release, self.arch)
