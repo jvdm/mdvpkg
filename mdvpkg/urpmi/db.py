@@ -294,7 +294,7 @@ class UrpmiDB(object):
             if fields and fields[0] == '%MDVPKG':
                 if fields[1] == 'ERROR':
                     msg = 'Backend error: %s' % ''.join(fields[2:])
-                    raise mdvpkg.exception.MdvPkgError, msg
+                    raise mdvpkg.exceptions.MdvPkgError, msg
                 elif fields[1] == 'SELECTED':
                     na = tuple(fields[3].split('@'))
                     if self._cache[na].in_progress is not None:
