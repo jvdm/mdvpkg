@@ -184,7 +184,7 @@ sub _get_state {
 	    fuzzy => 0,
 	    no_substring => 1,
 	) or do {
-	    response('error', 'error-not-found', @{ $installs });
+	    response_error('error-not-found', @{ $installs });
 	    return;
 	};
 	$restart = urpm::select::resolve_dependencies(
