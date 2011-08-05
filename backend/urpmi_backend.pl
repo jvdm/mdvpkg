@@ -152,8 +152,8 @@ sub on_task__commit {
     eval {
 	($restart, $state, $to_remove)
 	    = mdvpkg::create_state($urpm, $installs, $removes);
-    };
-    if ($@) {
+    }
+    or do ($@) {
 	response('error', $@->{error}, @{ $@->{names} });
     }
 

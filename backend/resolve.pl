@@ -71,7 +71,7 @@ MAIN: {
 	($restart, $state, $to_remove)
 	    = mdvpkg::create_state($urpm, $installs, $removes);
     }
-    if ($@) {
+    or do {
 	response_error($@->{error}, @{ $@->{names} });
     }
 
