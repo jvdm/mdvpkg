@@ -122,6 +122,9 @@ sub pkg_from_fullname {
     my @result = grep {
 	             $fullname eq $_->fullname
                  } $urpm->packages_providing($name);
+    if (@result == 0) {
+	die "could not find URPM::Package for $name";
+    }
     return $result[0];
 }
 
