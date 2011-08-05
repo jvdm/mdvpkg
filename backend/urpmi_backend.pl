@@ -153,9 +153,9 @@ sub on_task__commit {
 	($restart, $state, $to_remove)
 	    = mdvpkg::create_state($urpm, $installs, $removes);
     }
-    or do ($@) {
+    or do {
 	response('error', $@->{error}, @{ $@->{names} });
-    }
+    };
 
     # Populate pkg_map ...
     my %pkg_map = ();
