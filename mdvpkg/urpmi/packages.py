@@ -185,6 +185,16 @@ class Package(gobject.GObject):
         self.in_progress = None
         self.progress = None
 
+    def __getitem__(self, evrd):
+        item = None
+        if isinstance(type, RpmEVRD):
+            item = self._versions[na]
+        elif type(evrd) == dict:
+            item = self._versions[RpmEVRD(evrd)]
+        if item is None:
+            raise TypeError('bad type for evrd: %s' % type(evrd))
+        return item['rpm']
+
     @property
     def name(self):
         return self.na[0]

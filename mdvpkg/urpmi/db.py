@@ -290,16 +290,18 @@ class UrpmiDB(object):
             args.append('r:' + remove[0])
         backend.stdin.write('%s\n' % '\t'.join(args))
         for line in backend.communicate()[0].split('\n'):
-            fields = line.split()
-            if fields and fields[0] == '%MDVPKG':
-                if fields[1] == 'ERROR':
-                    msg = 'Backend error: %s' % ''.join(fields[2:])
+            if line.startswith('%MDVPKG '):
+                fields = line.replace('%MDVPKG ', '', 1).split('\t')
+                if fields[0] == 'ERROR':
+                    msg = 'Backend error: %s' % ' '.join(fields[1:])
                     raise mdvpkg.exceptions.MdvPkgError, msg
-                elif fields[1] == 'SELECTED':
-                    na = tuple(fields[3].split('@'))
+                elif fields[0] == 'SELECTED':
+                    action, na, evrd = fields[1:]
+                    na = eval(na)
+                    evrd = eval(evrd)
                     if self._cache[na].in_progress is not None:
                         raise PackageInProgressConflict
-                    selected[fields[2]].append(na)
+                    selected[action].append((na, evrd))
         return selected
 
     def auto_select(self):
@@ -579,7 +581,7 @@ class PackageList(object):
         elif pkg.in_progress is not None:
             raise mdvpkg.exceptions.PackageInProgressConflict
         self._items[na]['action'] = ACTION_REMOVE
-        self._solve()
+        return self._solve()
 
     def install(self, index):
         na = self._names[index]
@@ -589,7 +591,7 @@ class PackageList(object):
         elif pkg.in_progress is not None:
             raise mdvpkg.exceptions.PackageInProgressConflict
         self._items[na]['action'] = ACTION_INSTALL
-        self._solve()
+        return self._solve()
 
     def no_action(self, index):
         na = self._names[index]
@@ -598,7 +600,7 @@ class PackageList(object):
             msg = 'package is required for action: %s' % item['action']
             raise mdvpkg.exceptions.MdvPkgError, msg
         item['action'] = ACTION_NO_ACTION
-        self._solve()
+        return self._solve()
 
     def _solve(self):
         """Select a package for installation and all it's dependencies."""
@@ -616,11 +618,20 @@ class PackageList(object):
                                                removes=removes)
         for item in items_with_actions:
             item['action'] = ACTION_NO_ACTION
+        installs_fn = []
+        removes_fn = []
         for action, names in action_list.iteritems():
-             for na in names:
+             for na, evrd in names:
                 log.debug('action changed for %s: %s', na, action)
                 self._items[na]['action'] = action
+                rpm = self._urpmi.get_package(na)[evrd]
+                if action in {ACTION_INSTALL, ACTION_AUTO_INSTALL}:
+                    installs_fn.append(rpm)
+                elif action in {ACTION_REMOVE, ACTION_AUTO_REMOVE}:
+                    removes_fn.append(rpm)
         self._sort_and_filter()
+        # (installable, removable, install_conflicts, remove_conflicts)
+        return installs_fn, removes_fn, [], []
 
     def process_actions(self):
         """Process the selected actions and their dependencies.

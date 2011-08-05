@@ -85,11 +85,11 @@ MAIN: {
 	else {
 	    $action = 'action-auto-install';
 	}
-	response_action($action, $pkg->name, $pkg->arch);
+	response_action($action, $pkg);
     }
 
     foreach (@{ $state->{orphans_to_remove} }) {
-	response_action('action-auto-remove', $_->name, $_->arch, );
+	response_action('action-auto-remove', $_);
     }
 
     foreach (grep {
@@ -97,13 +97,13 @@ MAIN: {
 		     && !$state->{rejected}{$_}{obsoleted};
 	     } keys %{$state->{rejected} || {}})
     {
-	my $disttag = $state->{rejected}{$_}{disttag} || '';
-	my $distepoch = $state->{rejected}{$_}{distepoch} || '';
-	s/-$disttag$distepoch// if ($disttag and $distepoch);
-	my $name;
-	my $arch;
-	($name, undef, undef, $arch) = /^(.+)-([^-]+)-([^-].*)\.(.+)$/;
-	response_action('action-remove', $name, $arch);
+	my $pkg = mdvpkg::pkg_from_fullname(
+                      $urpm,
+	              $_,
+	              $state->{rejected}{$_}{disttag},
+                      $state->{rejected}{$_}{distepoch}
+	          );
+	response_action('action-remove', $pkg);
     }
 
     # TODO There is no conflict checking !!
@@ -112,17 +112,15 @@ MAIN: {
 }
 
 sub response_action {
-    my ($action, $name, $arch) = @_;
-	printf("%%MDVPKG SELECTED %s %s@%s\n",
-	       $action,
-	       $name,
-	       $arch);
-
+    my ($action, $pkg) = @_;
+    my $na = mdvpkg::get_na($pkg),
+    my $evrd = mdvpkg::get_evrd($pkg);
+    printf("%%MDVPKG SELECTED\t%s\t%s\t%s\n", $action, $na, $evrd);
 }
 
 sub response_error {
     my ($name, @args) = @_;
-	printf("%%MDVPKG ERROR %s%s\n",
+	printf("%%MDVPKG ERROR\t%s%s\n",
 	       $name,
 	       @args ? ' ' . join("\t", @args) : '');
 
