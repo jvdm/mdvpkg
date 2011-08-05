@@ -85,11 +85,11 @@ MAIN: {
 	else {
 	    $action = 'action-auto-install';
 	}
-	response_action($pkg->name, $pkg->arch, $action);
+	response_action($action, $pkg->name, $pkg->arch);
     }
 
     foreach (@{ $state->{orphans_to_remove} }) {
-	response_action($_->name, $_->arch, 'action-auto-remove');
+	response_action('action-auto-remove', $_->name, $_->arch, );
     }
 
     foreach (grep {
@@ -103,7 +103,7 @@ MAIN: {
 	my $name;
 	my $arch;
 	($name, undef, undef, $arch) = /^(.+)-([^-]+)-([^-].*)\.(.+)$/;
-	response_action($name, $arch, 'action-remove');
+	response_action('action-remove', $name, $arch);
     }
 
     # TODO There is no conflict checking !!
@@ -112,7 +112,7 @@ MAIN: {
 }
 
 sub response_action {
-    my ($name, $arch, $action) = @_;
+    my ($action, $name, $arch) = @_;
 	printf("%%MDVPKG SELECTED %s %s@%s\n",
 	       $action,
 	       $name,
