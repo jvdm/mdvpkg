@@ -167,8 +167,14 @@ sub on_task__commit {
 
     _lock();
 
-    my ($restart, $state, $to_remove)
-	= mdvpkg::create_state($urpm, $installs, $removes);
+    my ($restart, $state, $to_remove);
+    eval {
+	($restart, $state, $to_remove)
+	    = mdvpkg::create_state($urpm, $installs, $removes);
+    };
+    if ($@) {
+	response('error', $@->{error}, @{ $@->{names} });
+    }
 
     # Populate pkg_map ...
     my %pkg_map = ();

@@ -65,8 +65,15 @@ MAIN: {
 	push @$list, $_;
     }
 
-    my ($restart, $state, $to_remove)
-	= mdvpkg::create_state($urpm, $installs, $removes);
+
+    my ($restart, $state, $to_remove);
+    eval {
+	($restart, $state, $to_remove)
+	    = mdvpkg::create_state($urpm, $installs, $removes);
+    }
+    if ($@) {
+	response_error($@->{error}, @{ $@->{names} });
+    }
 
     # Check %state and emit return data ...
     while (my ($id, $info) = each %{ $state->{selected} }) {
@@ -115,8 +122,8 @@ sub response_action {
 
 sub response_error {
     my ($name, @args) = @_;
-	printf("%%MDVPKG ERROR %s\n",
+	printf("%%MDVPKG ERROR %s%s\n",
 	       $name,
-	       join("\t", @args));
+	       @args ? ' ' . join("\t", @args) : '');
 
 }

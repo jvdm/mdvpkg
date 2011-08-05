@@ -64,7 +64,8 @@ sub create_state {
 			    die {error => 'error-remove-base',
 				 names => \@_};
 		    }) or do {
-			die {error => 'error-nothing-to-remove'}
+			die {error => 'error-nothing-to-remove',
+			     names => []}
 		    };
 	urpm::orphans::compute_future_unrequested_orphans(
 	    $urpm,
