@@ -99,9 +99,6 @@ sub create_state {
 		   );
     }
 
-    # TODO Check $state for conflicts and report that to caller as
-    #      error responses.
-
     return $restart, \%state, \@to_remove;
 }
 
@@ -149,6 +146,19 @@ sub get_evrd {
 	$evrd .= '}'
     }
     return $evrd;
+}
+
+##
+# get_na
+#     Return a python tuple string with the na of a package.
+#
+sub get_na {
+    my ($pkg) = shift;
+    my $name = $pkg->name;
+    my $arch = $pkg->arch;
+    $name =~ s/'/\'/g;
+    $arch =~ s/'/\'/g;
+    return sprintf("('%s', '%s')", $name, $arch);
 }
 
 
