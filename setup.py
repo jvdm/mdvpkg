@@ -49,7 +49,8 @@ setup(
         ('/usr/share/dbus-1/system-services/', glob('dbus/*.service')),
         ('/usr/share/polkit-1/actions/', glob('policykit/*.policy')),
         (mdvpkg.DEFAULT_BACKEND_DIR, ['backend/urpmi_backend.pl',
-                                      'backend/resolve.pl']),
+                                      'backend/resolve.pl',
+                                      'backend/mdvpkg.pm']),
     ],
     options={
         'install': { 'install_purelib': mdvpkg.DEFAULT_DATA_DIR,
