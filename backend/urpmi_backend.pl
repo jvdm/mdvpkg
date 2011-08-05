@@ -156,14 +156,14 @@ sub on_task__commit {
     or do {
 	response('error', $@->{error}, @{ $@->{names} });
     };
-
+    
     # Populate pkg_map ...
     my %pkg_map = ();
-    foreach my $id (keys %{ $state->{selected} }) {
+    foreach my $id (keys %{ $state->{selected} || [] }) {
 	my $pkg = $urpm->{depslist}[$id];
 	_add_pkg(\%pkg_map, $pkg);
     }
-    while (my ($fn, $rej) = each %{ $state->{rejected} }) {
+    while (my ($fn, $rej) = each %{ $state->{rejected} || {} }) {
 	my $pkg = mdvpkg::pkg_from_fullname(
 	              $urpm,
 	              $fn,
@@ -172,7 +172,7 @@ sub on_task__commit {
 	          );
 	_add_pkg(\%pkg_map, $pkg);
     }
-    _add_pkg(\%pkg_map, $_) foreach (@{ $state->{orphans_to_remove} });
+    _add_pkg(\%pkg_map, $_) foreach (@{ $state->{orphans_to_remove} || [] });
 
     init_progress(1
 		  + keys(%{ $state->{selected} }) * 2 # download + install
