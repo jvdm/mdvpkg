@@ -73,7 +73,7 @@ MAIN: {
     }
     or do {
 	response_error($@->{error}, @{ $@->{names} });
-    }
+    };
 
     # Check %state and emit return data ...
     while (my ($id, $info) = each %{ $state->{selected} }) {
