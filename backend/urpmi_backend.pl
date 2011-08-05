@@ -112,25 +112,6 @@ sub _unlock {
     $rpmdb_lock = undef;
 }
 
-sub get_evrd {
-    my ($pkg) = @_;
-    my $evrd = sprintf(
-	"{'epoch': %s," .
-	" 'version': '%s'," .
-	" 'release': '%s'",
-	$pkg->epoch,
-	$pkg->version,
-	$pkg->release);
-    if ($pkg->distepoch) {
-	$evrd .= sprintf(", 'distepoch': '%s'}",
-			 $pkg->distepoch);
-    }
-    else {
-	$evrd .= '}'
-    }
-    return $evrd;
-}
-
 ##
 # _add_pkg
 #     Add fullname and nvra entries to a pkg_map hash.
@@ -207,7 +188,7 @@ sub on_task__commit {
 	callback_report_uninst => sub {
 	    my @return = split(/ /, $_[0]);
 	    my $pkg = $pkg_map{$return[-1]};
-	    my $evrd = get_evrd($pkg);
+	    my $evrd = mdvpkg::get_evrd($pkg);
 	    response('callback', 'remove_start',
 		     $pkg->name, $pkg->arch, 100, $remove_count);
 	    response('callback', 'remove_progress',
@@ -254,7 +235,7 @@ sub on_task__commit {
 			     @na, $percent, $total, $eta, $speed);
 		}
 		elsif ($mode eq 'end') {
-		    my $evrd = get_evrd($p);
+		    my $evrd = mdvpkg::get_evrd($p);
 		    response('callback', 'download_end',
 			     $p->name, $p->arch,
 			     $evrd);
@@ -282,7 +263,7 @@ sub on_task__commit {
 		    response('callback', 'install_progress',
 			     $pkg->name, $pkg->arch, $amount, $total);
 		    if ($amount ==  $total) {
-			my $evrd = get_evrd($pkg);
+			my $evrd = mdvpkg::get_evrd($pkg);
 			response('callback', 'install_end',
 				 $pkg->name, $pkg->arch,
 				 $evrd);

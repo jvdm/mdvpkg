@@ -128,5 +128,28 @@ sub pkg_from_fullname {
     return $result[0];
 }
 
+##
+# get_evrd
+#     Return a python dictionary string with the evrd of a package.
+#
+sub get_evrd {
+    my ($pkg) = @_;
+    my $evrd = sprintf(
+	"{'epoch': %s," .
+	" 'version': '%s'," .
+	" 'release': '%s'",
+	$pkg->epoch,
+	$pkg->version,
+	$pkg->release);
+    if ($pkg->distepoch) {
+	$evrd .= sprintf(", 'distepoch': '%s'}",
+			 $pkg->distepoch);
+    }
+    else {
+	$evrd .= '}'
+    }
+    return $evrd;
+}
+
 
 1;
