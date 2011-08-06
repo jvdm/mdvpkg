@@ -305,12 +305,15 @@ class Package(object):
                     old_dict = self._versions.get(evrd)
                     if old_dict is None:
                         # self.emit('new-version', evrd)
+                        pass
                     else:
                         if old_dict['type'] != version_dict['type']:
                             if old_dict['type'] == 'installed':
                                 # self.emit('removed-version', evrd)
+                                pass
                             elif version_dict['type'] == 'installed':
                                 # self.emit('installed-version', evrd)
+                                pass
                     self._versions[evrd] = version_dict
                     self._types = other._types
 
