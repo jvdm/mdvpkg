@@ -22,7 +22,6 @@
 """Classes and functions for rpm package representations."""
 
 import rpm
-import gobject
 import logging
 import bisect
 
@@ -142,7 +141,7 @@ class RpmPackage(object):
                               self.epoch)
 
 
-class Package(gobject.GObject):
+class Package(object):
     """Represents a package, in terms of versions and updates, in the
     urpmi database cache.
 
@@ -150,32 +149,8 @@ class Package(gobject.GObject):
     list of package versions: installed, upgrades and downgrades.
     """
 
-    __gsignals__ = {
-        'deleted': (
-            gobject.SIGNAL_RUN_FIRST,
-            gobject.TYPE_NONE,
-            ()
-        ),
-        'installed-version': (
-            gobject.SIGNAL_RUN_FIRST,
-            gobject.TYPE_NONE,
-            (gobject.TYPE_PYOBJECT,)
-        ),
-        'removed-version': (
-            gobject.SIGNAL_RUN_FIRST,
-            gobject.TYPE_NONE,
-            (gobject.TYPE_PYOBJECT,)
-        ),
-        'new-version': (
-            gobject.SIGNAL_RUN_FIRST,
-            gobject.TYPE_NONE,
-            (gobject.TYPE_PYOBJECT,)
-        ),
-    }
-
     def __init__(self, na, urpmi):
         """Create a new instance in the update state."""
-        gobject.GObject.__init__(self)
         self.na = na
         self.urpmi = urpmi
         self._versions = {}  # { rpm.evrd: {'rpm': RPM, 'type': TYPE} }
@@ -311,13 +286,13 @@ class Package(gobject.GObject):
         """
         assert self.na == other.na
         if not other._versions:
-            self.emit('deleted')
+            # self.emit('deleted')
             self.clear()
         else:
             # Check deleted version ...
             for evrd in self._versions.keys():
                 if evrd not in other._versions:
-                    self.emit('version-deleted', evrd)
+                    # self.emit('version-deleted', evrd)
                     del self._versions[evrd]
             # Check for new versions and compare installed status to
             # signal new installations or removals ...
@@ -329,13 +304,13 @@ class Package(gobject.GObject):
                 else:
                     old_dict = self._versions.get(evrd)
                     if old_dict is None:
-                        self.emit('new-version', evrd)
+                        # self.emit('new-version', evrd)
                     else:
                         if old_dict['type'] != version_dict['type']:
                             if old_dict['type'] == 'installed':
-                                self.emit('removed-version', evrd)
+                                # self.emit('removed-version', evrd)
                             elif version_dict['type'] == 'installed':
-                                self.emit('installed-version', evrd)
+                                # self.emit('installed-version', evrd)
                     self._versions[evrd] = version_dict
                     self._types = other._types
 
