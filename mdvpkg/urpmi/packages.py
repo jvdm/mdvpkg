@@ -178,7 +178,7 @@ class Package(gobject.GObject):
         gobject.GObject.__init__(self)
         self.na = na
         self.urpmi = urpmi
-        self._versions = {}  # { rpm.na: {'rpm': RPM, 'type': TYPE} }
+        self._versions = {}  # { rpm.evrd: {'rpm': RPM, 'type': TYPE} }
         self._types = {'installed': [],
                        'upgrade': [],
                        'downgrade': []}
