@@ -157,6 +157,7 @@ sub on_task__commit {
 	response('error', $@->{error}, @{ $@->{names} });
     };
 
+
     # Populate pkg_map ...
     my %pkg_map = ();
     foreach my $id (keys %{ $state->{selected} || {} }) {
@@ -173,148 +174,158 @@ sub on_task__commit {
     _add_pkg(\%pkg_map, $_) foreach (@{ $state->{orphans_to_remove} || [] });
 
     init_progress(1
-		  + keys(%{ $state->{selected} }) * 2 # download + install
-	          + @$to_remove);                       # number of removes
+		  + keys(%{ $state->{selected} || {} }) * 2
+	          + @$to_remove);
+
+    progress(1);
 
     # Remove packages ...
     my $remove_count = @$to_remove;
-    urpm::install::install(
-	$urpm,
-	$to_remove,
-	{},
-	{},
-	callback_report_uninst => sub {
-	    my @return = split(/ /, $_[0]);
-	    my $pkg = $pkg_map{$return[-1]};
-	    my $evrd = mdvpkg::get_evrd($pkg);
-	    response('callback', 'remove_start',
-		     $pkg->name, $pkg->arch, 100, $remove_count);
-	    response('callback', 'remove_progress',
-		     $pkg->name, $pkg->arch, 100, 100);
-	    response('callback', 'remove_end',
-		     $pkg->name, $pkg->arch, $evrd);
-	    progress(1);
-	}
-    );
+    if (@$to_remove) {
+        urpm::install::install(
+            $urpm,
+            $to_remove,
+            {},
+            {},
+            callback_report_uninst => sub {
+                my @return = split(/ /, $_[0]);
+                my $pkg = $pkg_map{$return[-1]};
+                my $evrd = mdvpkg::get_evrd($pkg);
+                response('callback', 'remove_start',
+                         $pkg->name, $pkg->arch, 100, $remove_count);
+                response('callback', 'remove_progress',
+                         $pkg->name, $pkg->arch, 100, 100);
+                response('callback', 'remove_end',
+                         $pkg->name, $pkg->arch, $evrd);
+                progress(1);
+            }
+        );
+    }
 
-    # Start urpm loop to download, remove and install packages ...
-    my $exit_code;
-    my %task_info = (set => undef,
-                     progress => 0);
-    progress(1);
+    if (%{ $state->{selected} || {} }) {
+	# Start urpm loop to download, remove and install packages ...
+	my $exit_code;
+	my %task_info = (set => undef,
+			 progress => 0);
 
-    $exit_code = urpm::main_loop::run(
-	$urpm,
-	$state,
-	undef,
-	undef,
-	undef,
-        {
-	    completed => sub {
-		_unlock();
-		response('done');
-		# reload package data:
-		urpm::media::configure($urpm);
-	    },
-	    pre_removable => undef,
-	    post_removable => undef,
-            copy_removable => sub {
-                die "removable media found: $_[0]\n";
-            },
-            trans_log => sub {
-                my ($mode, $urlfile, $percent, $total, $eta, $speed) = @_;
-                my $p = $pkg_map{fileparse($urlfile, '.rpm')};
-                my @na = ($p->name, $p->arch);
-                if ($mode eq 'start') {
-                    response('callback', 'download_start', @na);
-                }
-                elsif ($mode eq 'progress') {
-		    response('callback', 'download_progress',
-			     @na, $percent, $total, $eta, $speed);
-		}
-		elsif ($mode eq 'end') {
-		    my $evrd = mdvpkg::get_evrd($p);
-		    response('callback', 'download_end',
-			     $p->name, $p->arch,
-			     $evrd);
-		    progress(1);
-		}
-		elsif ($mode eq 'error') {
-		    # error message is 3rd argument:
-		    response('callback', 'download_error',
-			     @na, $percent);
-		}
-		else {
-		    die "trans_log callback with unknown mode: $mode\n";
-		}
-	    },
-	    trans => sub {
-		my ($urpm, $type, $id, $subtype, $amount, $total) = @_;
-		if ($subtype eq 'start') {
-		    response('callback', 'preparing', $total);
-		}
-	    },
-	    inst => sub {
-		my ($urpm, $type, $id, $subtype, $amount, $total) = @_;
-		my $pkg = $urpm->{depslist}[$id];
-		if ($subtype eq 'progress') {
-		    response('callback', 'install_progress',
-			     $pkg->name, $pkg->arch, $amount, $total);
-		    if ($amount ==  $total) {
-			my $evrd = mdvpkg::get_evrd($pkg);
-			response('callback', 'install_end',
-				 $pkg->name, $pkg->arch,
+	$exit_code = urpm::main_loop::run(
+	    $urpm,
+	    $state,
+	    undef,
+	    undef,
+	    undef,
+	    {
+		completed => sub {
+		    _unlock();
+		    response('done');
+		    # reload package data:
+		    urpm::media::configure($urpm);
+		},
+		pre_removable => undef,
+		post_removable => undef,
+		copy_removable => sub {
+		    die "removable media found: $_[0]\n";
+		},
+		trans_log => sub {
+		    my ($mode,
+			$urlfile,
+			$percent,
+			$total,
+			$eta,
+			$speed) = @_;
+		    my $p = $pkg_map{fileparse($urlfile, '.rpm')};
+		    my @na = ($p->name, $p->arch);
+		    if ($mode eq 'start') {
+			response('callback', 'download_start', @na);
+		    }
+		    elsif ($mode eq 'progress') {
+			response('callback', 'download_progress',
+				 @na, $percent, $total, $eta, $speed);
+		    }
+		    elsif ($mode eq 'end') {
+			my $evrd = mdvpkg::get_evrd($p);
+			response('callback', 'download_end',
+				 $p->name, $p->arch,
 				 $evrd);
 			progress(1);
 		    }
-		}
-		elsif ($subtype eq 'start') {
-		    $task_info{progress} += 1;
-		    response('callback', 'install_start',
-			     $pkg->name, $pkg->arch,
-			     $total,
-			     $task_info{progress});
-		}
-	    },
-	    ask_yes_or_no => sub {
-		# response('callback', 'ask');
-		# return <> =~ /|Y|y|Yes|yes|true|True|/;
-		return 1;
-	    },
-	    message => sub {
-		my ($title, $message) = @_;
-		response('callback', 'message',
-			 $title, $message);
-	    },
-	    post_extract => sub {
-		my ($set,
-		    $transaction_sources,
-		    $transaction_sources_install) = @_;
-		$task_info{set} = $set;
-		$task_info{progress} = 0;
-	    },
-	    pre_check_sig => undef,
-	    check_sig => undef,
-	    bad_signature => sub {
-		response('callback', 'bad_signature');
-		_unlock();
-		die "bad signature\n";
-	    },
-	    post_download => sub {
-		# TODO Look for a cancellation flag so further
-		#      installation won't go
-	    },
-	    need_restart => sub {
-		my ($need_restart_formatted) = @_;
-		print "$_\n" foreach values %$need_restart_formatted;
-		response('callback', 'need_restart');
-	    },
-	    trans_error_summary => sub {
-		die "not implemented callback: trans_error_summary\n";
-	    },
-	    success_summary => undef,
-	}
-    );
+		    elsif ($mode eq 'error') {
+			# error message is 3rd argument:
+			response('callback', 'download_error',
+				 @na, $percent);
+		    }
+		    else {
+			die "trans_log callback with unknown mode: $mode\n";
+		    }
+		},
+		trans => sub {
+		    my ($urpm, $type, $id, $subtype, $amount, $total) = @_;
+		    if ($subtype eq 'start') {
+			response('callback', 'preparing', $total);
+		    }
+		},
+		inst => sub {
+		    my ($urpm, $type, $id, $subtype, $amount, $total) = @_;
+		    my $pkg = $urpm->{depslist}[$id];
+		    if ($subtype eq 'progress') {
+			response('callback', 'install_progress',
+				 $pkg->name, $pkg->arch, $amount, $total);
+			if ($amount ==  $total) {
+			    my $evrd = mdvpkg::get_evrd($pkg);
+			    response('callback', 'install_end',
+				     $pkg->name, $pkg->arch,
+				     $evrd);
+			    progress(1);
+			}
+		    }
+		    elsif ($subtype eq 'start') {
+			$task_info{progress} += 1;
+			response('callback', 'install_start',
+				 $pkg->name, $pkg->arch,
+				 $total,
+				 $task_info{progress});
+		    }
+		},
+		ask_yes_or_no => sub {
+		    # response('callback', 'ask');
+		    # return <> =~ /|Y|y|Yes|yes|true|True|/;
+		    return 1;
+		},
+		message => sub {
+		    my ($title, $message) = @_;
+		    response('callback', 'message',
+			     $title, $message);
+		},
+		post_extract => sub {
+		    my ($set,
+			$transaction_sources,
+			$transaction_sources_install) = @_;
+		    $task_info{set} = $set;
+		    $task_info{progress} = 0;
+		},
+		pre_check_sig => undef,
+		check_sig => undef,
+		bad_signature => sub {
+		    response('callback', 'bad_signature');
+		    _unlock();
+		    die "bad signature\n";
+		},
+		post_download => sub {
+		    # TODO Look for a cancellation flag so further
+		    #      installation won't go
+		},
+		need_restart => sub {
+		    my ($need_restart_formatted) = @_;
+		    print "$_\n" foreach values %$need_restart_formatted;
+		    response('callback', 'need_restart');
+		},
+		trans_error_summary => sub {
+		    die "not implemented callback: trans_error_summary\n";
+		},
+		success_summary => undef,
+	    }
+	);
+    }
 }
 
 sub on_task__search_files {

@@ -47,7 +47,7 @@ sub create_state {
     my ($urpm, $installs, $removals, %options) = @_;
 
     my %state = ();
-    my @to_remove = undef;
+    my @to_remove = ();
 
     if (@{ $removals || [] }) {
         @to_remove = urpm::select::find_packages_to_remove(
