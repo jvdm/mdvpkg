@@ -327,6 +327,7 @@ sub on_task__commit {
 	);
     }
     else {
+	_unlock();
 	response('done');
     }
 }
