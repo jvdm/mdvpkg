@@ -187,8 +187,8 @@ class Package(gobject.GObject):
 
     def __getitem__(self, evrd):
         item = None
-        if isinstance(type, RpmEVRD):
-            item = self._versions[na]
+        if isinstance(evrd, RpmEVRD):
+            item = self._versions[evrd]
         elif type(evrd) == dict:
             item = self._versions[RpmEVRD(evrd)]
         if item is None:
