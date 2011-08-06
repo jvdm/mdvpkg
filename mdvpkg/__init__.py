@@ -37,3 +37,40 @@ PACKAGE_LIST_IFACE = '%s.PackageList' % IFACE
 MANDRIVA_DATA_DIR = '/usr/share/mandriva'
 DEFAULT_DATA_DIR = '%s/mdvpkg' % MANDRIVA_DATA_DIR
 DEFAULT_BACKEND_DIR = '%s/backend' % DEFAULT_DATA_DIR
+
+
+class ConnectableObject(object):
+    """A object that can emit signals and call callbacks."""
+
+    def __init__(self, signals=None):
+        self.__signals = {}
+        self.__signals_callbacks = {}
+        if signals is not None:
+            for signal_name in signals:
+                self.__signals[signal_name] = []
+
+    def connect(self, signal_name, callback):
+        """Connect a callback to a signal."""
+        conn_tuple = (signal_name, callback)
+        handler = hash(conn_tuple)
+        self.__signals_callbacks[handler] = conn_tuple
+        self.__get_signal_handlers(signal_name).append(handler)
+        return handler
+
+    def disconnect(self, handler):
+        """Disconnect a signal callback."""
+        s_name, _ = self.__signals_callbacks.pop(handler)
+        self.__signals[s_name].remove(handler)
+
+    def emit(self, signal_name, *args):
+        """Emit a signal calling all callbacks."""
+        for handler in self.__get_signal_handlers(signal_name):
+            _, callback = self.__signals_callbacks[handler]
+            callback(*args)
+
+    def __get_signal_handlers(self, signal_name):
+        signal_handlers = self.__signals.get(signal_name)
+        if signal_handlers is None:
+            msg = 'attempt to emit an unknown signal: %s' % signal_name
+            raise Exception, msg
+        return signal_handlers

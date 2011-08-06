@@ -161,7 +161,7 @@ def parse_configuration(conf_path):
     return global_block, medias
 
 
-class UrpmiDB(object):
+class UrpmiDB(mdvpkg.ConnectableObject):
     """Provide access to the urpmi database of medias and packages."""
 
     def __init__(self, 
@@ -198,40 +198,20 @@ class UrpmiDB(object):
                              gobject.IO_IN,
                              self._ino_in_callback)
         self._runner = mdvpkg.urpmi.task.UrpmiRunner(self.backend_dir)
-        self._signals = {'download-start': [],
-                         'download-progress': [],
-                         'download-end': [],
-                         'download-error': [],
-                         'install-start': [],
-                         'install-progress': [],
-                         'remove-start': [],
-                         'remove-progress': [],
-                         'preparing': [],
-                         'package-changed': [],
-                         'task-queued': [],
-                         'task-running': [],
-                         'task-progress': [],
-                         'task-done': []}
-        self._signals_callbacks = {}
-
-    def emit(self, signal_name, *args, **kwargs):
-        """Emit a signal calling all callbacks."""
-        for handler in self._signals[signal_name]:
-            callback, _ = self._signals_callbacks[handler]
-            callback(*args, **kwargs)
-
-    def connect(self, signal_name, callback):
-        """Connect a callback to a signal."""
-        conn_tuple = (callback, signal_name)
-        handler = hash(conn_tuple)
-        self._signals_callbacks[handler] = conn_tuple
-        self._signals[signal_name].append(handler)
-        return handler
-
-    def disconnect(self, handler_id):
-        """Disconnect a signal callback."""
-        _, s_name = self._signals_callbacks.pop(handler_id)
-        self._signals[s_name].remove(handler_id)
+        super(UrpmiDB, self).__init__(signals=['download-start',
+                                               'download-progress',
+                                               'download-end',
+                                               'download-error',
+                                               'install-start',
+                                               'install-progress',
+                                               'remove-start',
+                                               'remove-progress',
+                                               'preparing',
+                                               'package-changed',
+                                               'task-queued',
+                                               'task-running',
+                                               'task-progress',
+                                               'task-done'])
 
     def configure_medias(self):
         """Read configuration file, locate and populate the list of
