@@ -75,6 +75,7 @@ MAIN: {
 	or do {
 	    chomp($@);
 	    response('exception', $@);
+	    _unlock() if (defined $rpmdb_lock);
 	};
     }
 }
