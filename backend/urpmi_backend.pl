@@ -326,6 +326,9 @@ sub on_task__commit {
 	    }
 	);
     }
+    else {
+	response('done');
+    }
 }
 
 sub on_task__search_files {
