@@ -156,7 +156,7 @@ sub on_task__commit {
     or do {
 	response('error', $@->{error}, @{ $@->{names} });
     };
-    
+
     # Populate pkg_map ...
     my %pkg_map = ();
     foreach my $id (keys %{ $state->{selected} || [] }) {
@@ -164,13 +164,11 @@ sub on_task__commit {
 	_add_pkg(\%pkg_map, $pkg);
     }
     while (my ($fn, $rej) = each %{ $state->{rejected} || {} }) {
-	my $pkg = mdvpkg::pkg_from_fullname(
-	              $urpm,
-	              $fn,
-	              $rej->{disttag},
-	              $rej->{distepoch}
-	          );
-	_add_pkg(\%pkg_map, $pkg);
+	foreach (@{ $urpm->{depslist} }) {
+	    if ($_->fullname eq $fn) {
+		_add_pkg(\%pkg_map, $_);
+	    }
+	}
     }
     _add_pkg(\%pkg_map, $_) foreach (@{ $state->{orphans_to_remove} || [] });
 
