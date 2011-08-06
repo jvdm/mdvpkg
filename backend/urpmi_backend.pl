@@ -159,7 +159,7 @@ sub on_task__commit {
 
     # Populate pkg_map ...
     my %pkg_map = ();
-    foreach my $id (keys %{ $state->{selected} || [] }) {
+    foreach my $id (keys %{ $state->{selected} || {} }) {
 	my $pkg = $urpm->{depslist}[$id];
 	_add_pkg(\%pkg_map, $pkg);
     }
