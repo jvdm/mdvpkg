@@ -644,7 +644,6 @@ class PackageList(object):
         removes = []
         auto_removes = []
         for na, item in self._items.iteritems():
-            pkg = self._urpmi.get_package(na)
             if item['action'] == ACTION_INSTALL:
                 installs.append(na)
             elif item['action'] == ACTION_AUTO_INSTALL:
@@ -659,7 +658,9 @@ class PackageList(object):
                                              'removing', 'removing'],
                                         [installs, auto_installs,
                                              removes, auto_removes]):
-            for pkg in [self._urpmi.get_package(na) for na in na_list]:
+            for na in na_list:
+                self._items[na]['action'] = ACTION_NO_ACTION
+                pkg = self._urpmi.get_package(na)
                 pkg.in_progress = in_progress
                 pkg.progress = 0.0
         self._sort_and_filter()
