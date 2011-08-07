@@ -164,5 +164,16 @@ sub get_na {
     return sprintf("('%s', '%s')", $name, $arch);
 }
 
+##
+# pkg_arg
+#     Return both na and evrd to be used in reponses.
+#
+sub pkg_arg {
+    my $pkg = shift;
+    my $na = get_na($pkg),
+    my $evrd = get_evrd($pkg);
+    return $na, $evrd;
+}
+
 
 1;

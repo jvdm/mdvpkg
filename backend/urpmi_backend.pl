@@ -191,13 +191,13 @@ sub on_task__commit {
             callback_report_uninst => sub {
                 my @return = split(/ /, $_[0]);
                 my $pkg = $pkg_map{$return[-1]};
-                my $evrd = mdvpkg::get_evrd($pkg);
                 response('callback', 'remove_start',
-                         $pkg->name, $pkg->arch, 100, $remove_count);
+			 mdvpkg::pkg_arg($pkg),
+                         100, $remove_count);
                 response('callback', 'remove_progress',
-                         $pkg->name, $pkg->arch, 100, 100);
+                         mdvpkg::pkg_arg($pkg), 100, 100);
                 response('callback', 'remove_end',
-                         $pkg->name, $pkg->arch, $evrd);
+                         mdvpkg::pkg_arg($pkg));
                 progress(1);
             }
         );
@@ -234,26 +234,27 @@ sub on_task__commit {
 			$total,
 			$eta,
 			$speed) = @_;
-		    my $p = $pkg_map{fileparse($urlfile, '.rpm')};
-		    my @na = ($p->name, $p->arch);
+		    my $pkg = $pkg_map{fileparse($urlfile, '.rpm')};
 		    if ($mode eq 'start') {
-			response('callback', 'download_start', @na);
+			response('callback',
+				 'download_start',
+				 mdvpkg::pkg_arg($pkg));
 		    }
 		    elsif ($mode eq 'progress') {
-			response('callback', 'download_progress',
-				 @na, $percent, $total, $eta, $speed);
+			response('callback',
+				 'download_progress',
+				 mdvpkg::pkg_arg($pkg),
+				 $percent, $total, $eta, $speed);
 		    }
 		    elsif ($mode eq 'end') {
-			my $evrd = mdvpkg::get_evrd($p);
 			response('callback', 'download_end',
-				 $p->name, $p->arch,
-				 $evrd);
+				 mdvpkg::pkg_arg($pkg));
 			progress(1);
 		    }
 		    elsif ($mode eq 'error') {
-			# error message is 3rd argument:
+			# error message is the 3rd argument, $percent:
 			response('callback', 'download_error',
-				 @na, $percent);
+				 mdvpkg::pkg_arg($pkg), $percent);
 		    }
 		    else {
 			die "trans_log callback with unknown mode: $mode\n";
@@ -269,20 +270,22 @@ sub on_task__commit {
 		    my ($urpm, $type, $id, $subtype, $amount, $total) = @_;
 		    my $pkg = $urpm->{depslist}[$id];
 		    if ($subtype eq 'progress') {
-			response('callback', 'install_progress',
-				 $pkg->name, $pkg->arch, $amount, $total);
+			response('callback',
+				 'install_progress',
+				 mdvpkg::pkg_arg($pkg),
+				 $amount,
+				 $total);
 			if ($amount ==  $total) {
-			    my $evrd = mdvpkg::get_evrd($pkg);
-			    response('callback', 'install_end',
-				     $pkg->name, $pkg->arch,
-				     $evrd);
+			    response('callback',
+				     'install_end',
+				     mdvpkg::pkg_arg($pkg));
 			    progress(1);
 			}
 		    }
 		    elsif ($subtype eq 'start') {
 			$task_info{progress} += 1;
 			response('callback', 'install_start',
-				 $pkg->name, $pkg->arch,
+				 mdvpkg::pkg_arg($pkg),
 				 $total,
 				 $task_info{progress});
 		    }

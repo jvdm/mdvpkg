@@ -138,7 +138,6 @@ class UrpmiRunner(object):
             if line.startswith('<mdvpkg> '):
                 callback = self._task[1]
                 _, line = line.split(' ', 1)
-                log.debug('backend response: %s', line)
                 response = line.rstrip('\n').split('\t', 1)
                 if response[0] == 'callback':
                     try:
