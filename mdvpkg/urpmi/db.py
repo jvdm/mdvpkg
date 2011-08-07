@@ -406,56 +406,79 @@ class UrpmiDB(mdvpkg.ConnectableObject):
     def on_task_exception(self, task_id, message):
         log.debug('task exception: %s: %s', task_id, message)
 
-    def on_download_start(self, task_id, name, arch):
-        package = self._cache[(name, arch)]
-        package.progress = 0.0
+    def on_download_start(self, task_id, na, evrd):
+        na = eval(na)
+        evrd = eval(evrd)
+        package = self._cache[na]
+        package.on_download_start(evrd)
         self.emit('download-start', task_id, package)
 
-    def on_download_progress(self, task_id, name, arch, percent,
+    def on_download_progress(self, task_id, na, evrd, percent,
                              total, eta, speed):
-        package = self._cache[(name, arch)]
-        package.progress = int(percent) / 2.0 / 100
+        na = eval(na)
+        evrd = eval(evrd)
+        package = self._cache[na]
+        package.on_download_progress(evrd, float(percent) / 100.0)
         self.emit('download-progress',
                   task_id, package, percent, total, eta, speed)
 
-    def on_download_end(self, task_id, name, arch, evrd):
-        package = self._cache[(name, arch)]
-        package.progress = 0.5
+    def on_download_end(self, task_id, na, evrd):
+        na = eval(na)
+        evrd = eval(evrd)
+        package = self._cache[na]
+        package.on_download_done(evrd)
         self.emit('download-end', task_id, package)
+
+    def on_download_error(self, na, evrd, message):
+        na = eval(na)
+        evrd = eval(evrd)
+        package = self._cache[na]
+        package.on_download_done(evrd)
+        self.emit('download-error', task_id, package, message)
 
     def on_preparing(self, task_id, total):
         self.emit('preparing', task_id, total)
 
-    def on_install_start(self, task_id, name, arch, total, count):
-        package = self._cache[(name, arch)]
-        package.progress = 0.5
+    def on_install_start(self, task_id, na, evrd, total, count):
+        na = eval(na)
+        evrd = eval(evrd)
+        package = self._cache[na]
+        package.on_install_start(evrd)
         self.emit('install-start', task_id, package, total, count)
 
-    def on_install_progress(self, task_id, name, arch, amount, total):
-        package = self._cache[(name, arch)]
-        package.progress = 0.5  + (float(amount) / float(total) / 2.0)
+    def on_install_progress(self, task_id, na, evrd, amount, total):
+        na = eval(na)
+        evrd = eval(evrd)
+        package = self._cache[na]
+        package.on_install_progress(evrd, float(amount) / float(total))
         self.emit('install-progress', task_id, package, amount, total)
 
-    def on_install_end(self, task_id, name, arch, evrd):
-        package = self._cache[(name, arch)]
-        package.progress = None
-        package.on_install(eval(evrd))
+    def on_install_end(self, task_id, na, evrd):
+        na = eval(na)
+        evrd = eval(evrd)
+        package = self._cache[na]
+        package.on_install_done(evrd)
         self.emit('package-changed')
 
-    def on_remove_start(self, task_id, name, arch, total, count):
-        package = self._cache[(name, arch)]
-        package.progress = 0.0
+    def on_remove_start(self, task_id, na, evrd, total, count):
+        na = eval(na)
+        evrd = eval(evrd)
+        package = self._cache[na]
+        package.on_remove_start(evrd)
         self.emit('remove-start', task_id, package, total, count)
 
-    def on_remove_progress(self, task_id, name, arch, amount, total):
-        package = self._cache[(name, arch)]
-        package.progress = 100.0
+    def on_remove_progress(self, task_id, na, evrd, amount, total):
+        na = eval(na)
+        evrd = eval(evrd)
+        package = self._cache[na]
+        package.on_remove_progress(evrd, float(amount) / float(total))
         self.emit('remove-progress', task_id, package, amount, total)
 
-    def on_remove_end(self, task_id, name, arch, evrd):
-        package = self._cache[(name, arch)]
-        package.progress = None
-        package.on_remove(eval(evrd))
+    def on_remove_end(self, task_id, na, evrd):
+        na = eval(na)
+        evrd = eval(evrd)
+        package = self._cache[na]
+        package.on_remove_done(evrd)
         self.emit('package-changed')
 
 
