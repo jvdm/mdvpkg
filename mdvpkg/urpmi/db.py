@@ -264,10 +264,11 @@ class UrpmiDB(mdvpkg.ConnectableObject):
         #            the backend.
         args = []
         for install in installs:
-            name = self._cache[install].latest_upgrade.__str__()
+            name = '%s' % (self._cache[install].latest_upgrade)
             args.append(name)
         for remove in removes:
-            args.append('r:' + remove[0])
+            name = '%s' % (self._cache[remove].latest_installed)
+            args.append('r:' + name)
         backend.stdin.write('%s\n' % '\t'.join(args))
         for line in backend.communicate()[0].split('\n'):
             if line.startswith('%MDVPKG '):

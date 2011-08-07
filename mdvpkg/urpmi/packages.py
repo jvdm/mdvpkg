@@ -149,8 +149,7 @@ class RpmPackage(object):
         return self.evrd.__cmp__(other.evrd)
 
     def __str__(self):
-        return '%s-%s-%s.%s' % (self.name, self.version,
-                                self.release, self.arch)
+        return '%s-%s-%s.%s' % self.nvra
 
     def __repr__(self):
         return '%s(%s:%s)' % (self.__class__.__name__,
