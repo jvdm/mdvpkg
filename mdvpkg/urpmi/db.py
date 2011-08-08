@@ -631,7 +631,9 @@ class PackageList(object):
         return self._solve()
 
     def _solve(self):
-        """Select a package for installation and all it's dependencies."""
+        """Select all packages with actions, solve dependencies
+        updating actions.  Return lists of selections and rejections.
+        """
         installs = []
         removes = []
         items_with_actions = []
