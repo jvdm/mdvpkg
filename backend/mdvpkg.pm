@@ -192,8 +192,9 @@ sub pkg_arg_tuple {
 #
 #   Currently the fullnames mapped are from:
 #     - {rejected},
-#     - {backtrack}{conflicts}
-#     - {backtrack}{unsatisfied}
+#     - {rejected}{FN}{closure}
+#     - {rejected}{FN}{backtrack}{conflicts}
+#     - {rejected}{FN}{backtrack}{unsatisfied}
 #
 sub create_pkg_map {
     my $urpm = shift;
