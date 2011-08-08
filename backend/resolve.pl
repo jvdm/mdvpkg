@@ -83,9 +83,11 @@ MAIN: {
     CHECK_UNSELECTED: {
 	my @unselected_names = grep {
 	                           $state->{rejected}{$_}{backtrack}
+				   || $state->{rejected}{$_}{closure}
 	                       } keys %{ $state->{rejected} };
 	foreach my $fullname (@unselected_names) {
             my $pkg = $pkg_map->{$fullname};
+
             my $backtrack = $state->{rejected}{$fullname}{backtrack};
             if (@{ $backtrack->{unsatisfied} || [] }) {
                 response_reject(
@@ -96,14 +98,16 @@ MAIN: {
                     } @{ $backtrack->{unsatisfied} }
                 );
             }
-	    if (@{ $backtrack->{conflicts} || [] }) {
-		response_reject(
-		    'reject-install-conflicts',
-		    $pkg,
-		    map {
-			mdvpkg::pkg_arg_tuple($pkg_map->{$_});
-		    } @{ $backtrack->{conflicts} }
-		);
+	    foreach my $type (qw(conflicts keep)) {
+		if (@{ $backtrack->{$type} || [] }) {
+		    response_reject(
+			'reject-install-conflicts',
+			$pkg,
+			map {
+			    mdvpkg::pkg_arg_tuple($pkg_map->{$_});
+			} @{ $backtrack->{$type} }
+		    );
+		}
 	    }
 
 	    # TODO Don't known how to handle theses cases.  They're
@@ -113,9 +117,22 @@ MAIN: {
 		print "trying to promote", join(", ",
 						@{$backtrack->{promote}});
 	    }
-	    if ($backtrack->{keep}) {
-		print "in order to keep %s", join(", ",
-						  @{$backtrack->{keep}});
+
+            my $closure = $state->{rejected}{$fullname}{closure};
+	    if (%{ $closure || {} }) {
+		my ($from) = grep {
+				$_ ne 'disttag' && $_ ne 'distepoch'
+			    } keys %$closure;
+		my ($whyk) = grep {
+				$_ ne 'disttag' && $_ ne 'distepoch'
+			     } keys %{ $closure->{$from} };
+		if ($whyk eq 'avoid') {
+		    response_reject(
+			'reject-install-rejected-dependency',
+			$pkg,
+			mdvpkg::pkg_arg_tuple($pkg_map->{$from})
+		    );
+		}
 	    }
 	}
     }
