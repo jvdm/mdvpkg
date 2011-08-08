@@ -96,6 +96,7 @@ sub create_state {
 		       \%state,
 		       \%packages,
 		       auto_select => $options{auto_select},
+	               keep => 1
 		   );
     }
 
@@ -209,8 +210,12 @@ sub create_pkg_map {
 
     while (my ($fn, $rej) = each %{ $state->{rejected} }) {
 	$add_fullname->($fn);
-	$add_fullname->($_)
-	    foreach (@{ $rej->{backtrack}{conflicts} || []})
+	foreach (@{ $rej->{backtrack}{conflicts} || []},
+		 @{ $rej->{backtrack}{keep} || []},
+		 keys %{ $rej->{closure} || {} })
+	{
+	    $add_fullname->($_)
+	}
     }
 
     # Iterate over all depslist and add the URPM::Package to the
