@@ -75,6 +75,7 @@ MAIN: {
     }
     or do {
 	response_error($@->{error}, @{ $@->{names} });
+	exit 0;
     };
 
     my $pkg_map = mdvpkg::create_pkg_map($urpm, $state);
@@ -84,7 +85,7 @@ MAIN: {
 	my @unselected_names = grep {
 	                           $state->{rejected}{$_}{backtrack}
 				   || $state->{rejected}{$_}{closure}
-	                       } keys %{ $state->{rejected} };
+	                       } keys %{ $state->{rejected} || [] };
 	foreach my $fullname (@unselected_names) {
             my $pkg = $pkg_map->{$fullname};
 
@@ -137,6 +138,33 @@ MAIN: {
 	}
     }
 
+    CHECK_REMOVED: {
+	my @removed_names
+	    = grep {
+		$state->{rejected}{$_}{removed}
+		&& !exists($state->{rejected}{$_}{removed}{asked})
+		&& !$state->{rejected}{$_}{obsoleted}
+	} keys %{ $state->{rejected} || {} };
+	if (@removed_names) {
+	    my %depends = ();
+	    foreach (@removed_names) {
+		my ($removed)
+		    = keys %{ $state->{rejected}{$_}{removed} };
+		push @{ $depends{$removed} ||= [] }, $_;
+	    }
+	    foreach (keys %depends) {
+		delete $state->{rejected}{$_};
+		my $pkg = $pkg_map->{$_};
+		response_reject(
+		    'reject-remove-depends',
+		    $pkg_map->{$_},
+		    map {
+			mdvpkg::pkg_arg_tuple($pkg_map->{$_});
+		    } @{ $depends{$_} });
+	    }
+	}
+    }
+
     # Emit actions ...
     while (my ($id, $info) = each %{ $state->{selected} }) {
 	my $pkg = $urpm->{depslist}[$id];
@@ -156,7 +184,8 @@ MAIN: {
 
     foreach (grep {
 	         $state->{rejected}{$_}{removed}
-		     && !$state->{rejected}{$_}{obsoleted};
+		     && !$state->{rejected}{$_}{obsoleted}
+		     && defined $state->{rejected}{$_}{asked}
 	     } keys %{$state->{rejected} || {}})
     {
 	my $pkg = mdvpkg::pkg_from_fullname(
