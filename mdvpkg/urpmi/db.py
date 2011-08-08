@@ -635,6 +635,7 @@ class PackageList(object):
         installs = []
         removes = []
         items_with_actions = []
+
         for na, item in self._items.iteritems():
             if item['action'] == ACTION_INSTALL:
                 installs.append(na)
@@ -642,6 +643,7 @@ class PackageList(object):
                 removes.append(na)
             if item['action'] != ACTION_NO_ACTION:
                 items_with_actions.append(item)
+
         action_list, reject_list \
             = self._urpmi.resolve_deps(installs=installs,
                                        removes=removes)
@@ -661,7 +663,6 @@ class PackageList(object):
                     removes_rej.append((reason,
                                         reject['rpm'],
                                         reject['subjects']))
-
         installs_fn = []
         removes_fn = []
         for action, names in action_list.iteritems():
@@ -674,8 +675,9 @@ class PackageList(object):
                     installs_fn.append(rpm)
                 elif action in {ACTION_REMOVE, ACTION_AUTO_REMOVE}:
                     removes_fn.append(rpm)
+
         self._sort_and_filter()
-        # (installable, removable, install_conflicts, remove_conflicts)
+
         return installs_fn, removes_fn, installs_rej, removes_rej
 
     def process_actions(self):
