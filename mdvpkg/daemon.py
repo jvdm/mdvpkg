@@ -305,7 +305,8 @@ class DBusPackageList(PackageList, dbus.service.Object):
         list.append(rej[0])
         list.append(rpm2nvra(rej[1]))
         # Convert subjects that are RpmPackage objects ...
-        if rej[0] in {'reject-install-conflicts'}:
+        if rej[0] in {'reject-install-conflicts',
+                      'reject-install-rejected-dependency'}:
             list.append(map(lambda rpm: rpm.nvra, rej[2]))
         else:
             list.append(rej[2])
