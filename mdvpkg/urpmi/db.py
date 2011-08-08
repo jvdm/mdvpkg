@@ -290,10 +290,11 @@ class UrpmiDB(mdvpkg.ConnectableObject):
                     evrd = eval(evrd)
                     if reason == 'reject-install-unsatisfied':
                         subjects = fields[4:]
-                    elif reason == 'reject-install-conflicts':
+                    elif reason in {'reject-install-conflicts',
+                                    'reject-install-rejected-dependency'}:
                         subjects = []
-                        for na, evrd in [eval(pt) for pt in fields[4:]]:
-                            subjects.append(self._cache[na][evrd])
+                        for na_s, evrd_s in [eval(pt) for pt in fields[4:]]:
+                            subjects.append(self._cache[na_s][evrd_s])
                     else:
                         subjects = None
                     rej_list = rejected.get(reason)
