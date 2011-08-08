@@ -175,5 +175,70 @@ sub pkg_arg {
     return $na, $evrd;
 }
 
+##
+# pkg_arg
+#     Return na and evrd in in python tuple syntax.
+#
+sub pkg_arg_tuple {
+    my $pkg = shift;
+    return '(' . join(', ', pkg_arg($pkg)) . ')';
+}
+
+##
+# create_pkg_map
+#   Return a map of relevant fullnames in $state object to
+#   URPM::Package.
+#
+#   Currently the fullnames mapped are from:
+#     - {rejected},
+#     - {backtrack}{conflicts}
+#     - {backtrack}{unsatisfied}
+#
+sub create_pkg_map {
+    my $urpm = shift;
+    my $state = shift;
+
+    my %fullnames = ();
+
+    my $add_fullname = sub {
+	my $fn = shift;
+	exists $fullnames{$fn} or $fullnames{$fn} = undef;
+    };
+
+    # Populate the fullname hash with undef values ...
+
+    while (my ($fn, $rej) = each %{ $state->{rejected} }) {
+	$add_fullname->($fn);
+	$add_fullname->($_)
+	    foreach (@{ $rej->{backtrack}{conflicts} || []})
+    }
+
+    # Iterate over all depslist and add the URPM::Package to the
+    # fullnames hash ...
+
+    my $count = keys %fullnames;
+    foreach (@{ $urpm->{depslist} }) {
+	$count or last;
+	if (exists $fullnames{$_->fullname}) {
+	    if (defined $fullnames{$_->fullname}) {
+		die 'two packages same fullname in depslist: '
+		    . $_->fullname;
+	    }
+	    $fullnames{$_->fullname} = $_;
+	    my $nvra = sprintf("%s-%s-%s.%s",
+			       $_->name,
+			       $_->version,
+			       $_->release,
+			       $_->arch);
+	    if ($nvra ne $_->fullname) {
+		$fullnames{$nvra} = $_
+	    }
+	    --$count;
+	}
+    }
+
+    return \%fullnames;
+}
+
 
 1;

@@ -269,7 +269,7 @@ class DBusPackageList(PackageList, dbus.service.Object):
     @dbus.service.method(
         mdvpkg.PACKAGE_LIST_IFACE,
         in_signature='u',
-        out_signature='a(ssss)a(ssss)a((ssss)sv)a((ssss)sv)',
+        out_signature='a(ssss)a(ssss)a(s(ssss)v)a(s(ssss)v)',
         sender_keyword='sender',
         connection_keyword='connection'
     )
@@ -277,19 +277,7 @@ class DBusPackageList(PackageList, dbus.service.Object):
         """Mark a package and its dependencies for installation."""
         log.debug('Install(%s) called', index)
         self._check_owner(sender)
-        installs, removes, not_installs, not_removes \
-            = self.install(index)
-        installs = map(lambda rpm: (rpm.name,
-                                    rpm.version,
-                                    rpm.release,
-                                    rpm.arch),
-                       installs)
-        removes = map(lambda rpm: (rpm.name,
-                                   rpm.version,
-                                   rpm.release,
-                                   rpm.arch),
-                      removes)
-        return installs, removes, [], []
+        return self._convert_actions(*self.install(index))
 
     @dbus.service.method(
         mdvpkg.PACKAGE_LIST_IFACE,
@@ -302,19 +290,26 @@ class DBusPackageList(PackageList, dbus.service.Object):
         """Mark a package and its dependencies for removal."""
         log.debug('Remove(%s) called', index)
         self._check_owner(sender)
-        installs, removes, not_installs, not_removes \
-            = self.remove(index)
-        installs = map(lambda rpm: (rpm.name,
-                                    rpm.version,
-                                    rpm.release,
-                                    rpm.arch),
-                       installs)
-        removes = map(lambda rpm: (rpm.name,
-                                   rpm.version,
-                                   rpm.release,
-                                   rpm.arch),
-                      removes)
-        return installs, removes, [], []
+        return self._convert_actions(*self.remove(index))
+
+    def _convert_actions(self, ins_sel, rm_sel, ins_rej, rm_rej):
+        ins_sel = map(lambda rpm: rpm.nvra, ins_sel)
+        ins_rej = map(self._convert_rej, ins_rej)
+        rm_sel = map(lambda rpm: rpm.nvra, rm_sel)
+        rm_rej = map(self._convert_rej, rm_rej)
+        return ins_sel, rm_sel, ins_rej, rm_rej
+
+    def _convert_rej(self, rej):
+        rpm2nvra = lambda rpm: rpm.nvra
+        list = []
+        list.append(rej[0])
+        list.append(rpm2nvra(rej[1]))
+        # Convert subjects that are RpmPackage objects ...
+        if rej[0] in {'reject-install-conflicts'}:
+            list.append(map(lambda rpm: rpm.nvra, rej[2]))
+        else:
+            list.append(rej[2])
+        return tuple(list)
 
     @dbus.service.method(mdvpkg.PACKAGE_LIST_IFACE,
                          in_signature='u',
