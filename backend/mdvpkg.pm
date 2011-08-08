@@ -25,6 +25,7 @@ package mdvpkg;
 
 use urpm::select qw();
 use urpm::orphans qw();
+use URPM;
 
 
 ##
@@ -207,6 +208,21 @@ sub create_pkg_map {
 	exists $fullnames{$fn} or $fullnames{$fn} = undef;
     };
 
+    my $set_fullname = sub {
+	my $pkg = shift;
+	if (exists $fullnames{$pkg->fullname}) {
+	    $fullnames{$pkg->fullname} = $pkg;
+	    my $nvra = sprintf("%s-%s-%s.%s",
+			       $pkg->name,
+			       $pkg->version,
+			       $pkg->release,
+			       $pkg->arch);
+	    if ($nvra ne $pkg->fullname) {
+		$fullnames{$nvra} = $pkg
+	    }
+	}
+    };
+
     # Populate the fullname hash with undef values ...
 
     while (my ($fn, $rej) = each %{ $state->{rejected} }) {
@@ -219,29 +235,15 @@ sub create_pkg_map {
 	}
     }
 
-    # Iterate over all depslist and add the URPM::Package to the
-    # fullnames hash ...
-
+    # Iterate over all installed and depslist to add the
+    # URPM::Package to the fullnames hash ...
+    my $db = URPM::DB::open();
+    $db->traverse(sub {
+	              my $pkg = shift;
+		      $set_fullname->($pkg);
+		  });
     my $count = keys %fullnames;
-    foreach (@{ $urpm->{depslist} }) {
-	$count or last;
-	if (exists $fullnames{$_->fullname}) {
-	    if (defined $fullnames{$_->fullname}) {
-		die 'two packages same fullname in depslist: '
-		    . $_->fullname;
-	    }
-	    $fullnames{$_->fullname} = $_;
-	    my $nvra = sprintf("%s-%s-%s.%s",
-			       $_->name,
-			       $_->version,
-			       $_->release,
-			       $_->arch);
-	    if ($nvra ne $_->fullname) {
-		$fullnames{$nvra} = $_
-	    }
-	    --$count;
-	}
-    }
+	$set_fullname->($_) foreach (@{ $urpm->{depslist} });
 
     return \%fullnames;
 }
