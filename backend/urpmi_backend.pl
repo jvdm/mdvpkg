@@ -176,13 +176,13 @@ sub on_task__commit {
 
     init_progress(1
 		  + keys(%{ $state->{selected} || {} }) * 2
-	          + @$to_remove);
+	          + @{ $to_remove || [] });
 
     progress(1);
 
     # Remove packages ...
-    my $remove_count = @$to_remove;
-    if (@$to_remove) {
+    my $remove_count = @{ $to_remove || [] };
+    if (@{ $to_remove || [] }) {
         urpm::install::install(
             $urpm,
             $to_remove,
@@ -192,12 +192,12 @@ sub on_task__commit {
                 my @return = split(/ /, $_[0]);
                 my $pkg = $pkg_map{$return[-1]};
                 response('callback', 'remove_start',
-			 mdvpkg::pkg_arg($pkg),
+			 mdvpkg::create_pkg_arg($pkg),
                          100, $remove_count);
                 response('callback', 'remove_progress',
-                         mdvpkg::pkg_arg($pkg), 100, 100);
+                         mdvpkg::create_pkg_arg($pkg), 100, 100);
                 response('callback', 'remove_end',
-                         mdvpkg::pkg_arg($pkg));
+                         mdvpkg::create_pkg_arg($pkg));
                 progress(1);
             }
         );
@@ -238,23 +238,23 @@ sub on_task__commit {
 		    if ($mode eq 'start') {
 			response('callback',
 				 'download_start',
-				 mdvpkg::pkg_arg($pkg));
+				 mdvpkg::create_pkg_arg($pkg));
 		    }
 		    elsif ($mode eq 'progress') {
 			response('callback',
 				 'download_progress',
-				 mdvpkg::pkg_arg($pkg),
+				 mdvpkg::create_pkg_arg($pkg),
 				 $percent, $total, $eta, $speed);
 		    }
 		    elsif ($mode eq 'end') {
 			response('callback', 'download_end',
-				 mdvpkg::pkg_arg($pkg));
+				 mdvpkg::create_pkg_arg($pkg));
 			progress(1);
 		    }
 		    elsif ($mode eq 'error') {
 			# error message is the 3rd argument, $percent:
 			response('callback', 'download_error',
-				 mdvpkg::pkg_arg($pkg), $percent);
+				 mdvpkg::create_pkg_arg($pkg), $percent);
 		    }
 		    else {
 			die "trans_log callback with unknown mode: $mode\n";
@@ -272,20 +272,20 @@ sub on_task__commit {
 		    if ($subtype eq 'progress') {
 			response('callback',
 				 'install_progress',
-				 mdvpkg::pkg_arg($pkg),
+				 mdvpkg::create_pkg_arg($pkg),
 				 $amount,
 				 $total);
 			if ($amount ==  $total) {
 			    response('callback',
 				     'install_end',
-				     mdvpkg::pkg_arg($pkg));
+				     mdvpkg::create_pkg_arg($pkg));
 			    progress(1);
 			}
 		    }
 		    elsif ($subtype eq 'start') {
 			$task_info{progress} += 1;
 			response('callback', 'install_start',
-				 mdvpkg::pkg_arg($pkg),
+				 mdvpkg::create_pkg_arg($pkg),
 				 $total,
 				 $task_info{progress});
 		    }

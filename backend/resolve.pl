@@ -82,18 +82,20 @@ MAIN: {
 
     # Check %state and emit return data ...
     CHECK_UNSELECTED: {
-	my @unselected_names = grep {
-	                           $state->{rejected}{$_}{backtrack}
-				   || $state->{rejected}{$_}{closure}
-	                       } keys %{ $state->{rejected} || [] };
+	my @unselected_names
+	    = grep {
+		!exists($state->{rejected}{$_}{removed})
+		&& $state->{rejected}{$_}{backtrack}
+		|| $state->{rejected}{$_}{closure}
+	     } keys %{ $state->{rejected} || [] };
 	foreach my $fullname (@unselected_names) {
-            my $pkg = $pkg_map->{$fullname};
+            my $pkg_arg = $pkg_map->{$fullname};
 
             my $backtrack = $state->{rejected}{$fullname}{backtrack};
             if (@{ $backtrack->{unsatisfied} || [] }) {
                 response_reject(
                     'reject-install-unsatisfied',
-                    $pkg,
+                    $pkg_arg,
                     map {
                         /\D/ ? $_ : $urpm->{depslist}[$_]->fullname;
                     } @{ $backtrack->{unsatisfied} }
@@ -103,9 +105,9 @@ MAIN: {
 		if (@{ $backtrack->{$type} || [] }) {
 		    response_reject(
 			'reject-install-conflicts',
-			$pkg,
+			$pkg_arg,
 			map {
-			    mdvpkg::pkg_arg_tuple($pkg_map->{$_});
+			    $pkg_map->{$_};
 			} @{ $backtrack->{$type} }
 		    );
 		}
@@ -130,8 +132,8 @@ MAIN: {
 		if ($whyk eq 'avoid') {
 		    response_reject(
 			'reject-install-rejected-dependency',
-			$pkg,
-			mdvpkg::pkg_arg_tuple($pkg_map->{$from})
+			$pkg_arg,
+			$pkg_map->{$from}
 		    );
 		}
 	    }
@@ -154,12 +156,11 @@ MAIN: {
 	    }
 	    foreach (keys %depends) {
 		delete $state->{rejected}{$_};
-		my $pkg = $pkg_map->{$_};
 		response_reject(
 		    'reject-remove-depends',
 		    $pkg_map->{$_},
 		    map {
-			mdvpkg::pkg_arg_tuple($pkg_map->{$_});
+			$pkg_map->{$_};
 		    } @{ $depends{$_} });
 	    }
 	}
@@ -184,8 +185,8 @@ MAIN: {
 
     foreach (grep {
 	         $state->{rejected}{$_}{removed}
-		     && !$state->{rejected}{$_}{obsoleted}
-		     && defined $state->{rejected}{$_}{asked}
+		 && !$state->{rejected}{$_}{obsoleted}
+		 && exists($state->{rejected}{$_}{removed}{asked})
 	     } keys %{$state->{rejected} || {}})
     {
 	my $pkg = mdvpkg::pkg_from_fullname(
@@ -203,21 +204,20 @@ MAIN: {
 }
 
 sub response_reject {
-    my ($reason, $pkg, @args) = @_;
-    mdvpkg::pkg_arg($pkg);
+    my ($reason, $pkg_arg, @args) = @_;
     my $args = join("\t",
 		    'REJECTED',
 		    $reason,
-		    mdvpkg::pkg_arg($pkg),
+		    $pkg_arg,
 		    @args);
     printf("%%MDVPKG %s\n", $args);
 }
 
 sub response_action {
     my ($action, $pkg) = @_;
-    my $na = mdvpkg::get_na($pkg),
-    my $evrd = mdvpkg::get_evrd($pkg);
-    printf("%%MDVPKG SELECTED\t%s\t%s\t%s\n", $action, $na, $evrd);
+    printf("%%MDVPKG SELECTED\t%s\t%s\n",
+	   $action,
+	   mdvpkg::create_pkg_arg($pkg));
 }
 
 sub response_error {

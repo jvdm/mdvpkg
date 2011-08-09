@@ -131,11 +131,19 @@ sub pkg_from_fullname {
 }
 
 ##
-# get_evrd
-#     Return a python dictionary string with the evrd of a package.
+# create_pkg_arg
+#     Return both na and evrd in a string as a python tuple, to be
+#     used in reponses.
 #
-sub get_evrd {
-    my ($pkg) = @_;
+sub create_pkg_arg {
+    my $pkg = shift;
+
+    my $name = $pkg->name;
+    my $arch = $pkg->arch;
+    $name =~ s/'/\'/g;
+    $arch =~ s/'/\'/g;
+    my $na = sprintf("('%s', '%s')", $name, $arch);
+
     my $evrd = sprintf(
 	"{'epoch': %s," .
 	" 'version': '%s'," .
@@ -150,46 +158,14 @@ sub get_evrd {
     else {
 	$evrd .= '}'
     }
-    return $evrd;
-}
 
-##
-# get_na
-#     Return a python tuple string with the na of a package.
-#
-sub get_na {
-    my ($pkg) = shift;
-    my $name = $pkg->name;
-    my $arch = $pkg->arch;
-    $name =~ s/'/\'/g;
-    $arch =~ s/'/\'/g;
-    return sprintf("('%s', '%s')", $name, $arch);
-}
-
-##
-# pkg_arg
-#     Return both na and evrd to be used in reponses.
-#
-sub pkg_arg {
-    my $pkg = shift;
-    my $na = get_na($pkg),
-    my $evrd = get_evrd($pkg);
-    return $na, $evrd;
-}
-
-##
-# pkg_arg
-#     Return na and evrd in in python tuple syntax.
-#
-sub pkg_arg_tuple {
-    my $pkg = shift;
-    return '(' . join(', ', pkg_arg($pkg)) . ')';
+    return '(' . join(', ', $na, $evrd) . ')';
 }
 
 ##
 # create_pkg_map
 #   Return a map of relevant fullnames in $state object to
-#   URPM::Package.
+#   package arguments to be used in backend responses.
 #
 #   Currently the fullnames mapped are from:
 #     - {rejected},
@@ -210,15 +186,16 @@ sub create_pkg_map {
 
     my $set_fullname = sub {
 	my $pkg = shift;
+	my $pkg_arg = create_pkg_arg($pkg);
 	if (exists $fullnames{$pkg->fullname}) {
-	    $fullnames{$pkg->fullname} = $pkg;
+	    $fullnames{$pkg->fullname} = $pkg_arg;
 	    my $nvra = sprintf("%s-%s-%s.%s",
 			       $pkg->name,
 			       $pkg->version,
 			       $pkg->release,
 			       $pkg->arch);
 	    if ($nvra ne $pkg->fullname) {
-		$fullnames{$nvra} = $pkg
+		$fullnames{$nvra} = $pkg_arg;
 	    }
 	}
     };
