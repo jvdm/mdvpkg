@@ -156,8 +156,10 @@ sub on_task__commit {
     }
     or do {
 	response('error', $@->{error}, @{ $@->{names} });
+	return;
     };
 
+    $to_remove = mdvpkg::compute_orphans($urpm, $state, $to_remove);
 
     # Populate pkg_map ...
     my %pkg_map = ();

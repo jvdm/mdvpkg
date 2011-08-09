@@ -153,6 +153,7 @@ MAIN: {
 		my ($removed)
 		    = keys %{ $state->{rejected}{$_}{removed} };
 		push @{ $depends{$removed} ||= [] }, $_;
+		delete $state->{rejected}{$_};
 	    }
 	    foreach (keys %depends) {
 		delete $state->{rejected}{$_};
@@ -165,6 +166,8 @@ MAIN: {
 	    }
 	}
     }
+
+    mdvpkg::compute_orphans($urpm, $state, $to_remove);
 
     # Emit actions ...
     while (my ($id, $info) = each %{ $state->{selected} }) {

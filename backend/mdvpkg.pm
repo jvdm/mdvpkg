@@ -29,6 +29,34 @@ use URPM;
 
 
 ##
+# compute_orphans
+#     Compute from a $state object the orphans to remove and add them
+#     to @to_remove.
+# :Parameters:
+#     `$urpm` : The urpm object
+#     `$state` : The state object
+#     `$to_remove : list ref
+#         The list of names to append orphans.
+# :Returns:
+#     The $to_remove list ref
+#
+sub compute_orphans {
+    my $urpm = shift;
+    my $state = shift;
+    my $to_remove = shift;
+
+    urpm::orphans::compute_future_unrequested_orphans(
+	$urpm,
+	$state
+    );
+    push(@{ $to_remove },
+	 map {
+	     scalar $_->fullname
+	 } @{ $state->{orphans_to_remove} });
+    return $to_remove
+}
+
+##
 # create_state
 #     Get lists of package fullnames for installation and removal to
 #     create a $state object and parameters for main_loop and
@@ -68,14 +96,6 @@ sub create_state {
 			die {error => 'error-nothing-to-remove',
 			     names => []}
 		    };
-	urpm::orphans::compute_future_unrequested_orphans(
-	    $urpm,
-	    \%state
-	);
-	push(@to_remove,
-	     map {
-		 scalar $_->fullname
-	     } @{ $state{orphans_to_remove} });
     }
 
     my $restart;
