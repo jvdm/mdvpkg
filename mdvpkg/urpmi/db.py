@@ -278,18 +278,16 @@ class UrpmiDB(mdvpkg.ConnectableObject):
                     msg = 'Backend error: %s' % ' '.join(fields[1:])
                     raise mdvpkg.exceptions.MdvPkgError, msg
                 elif fields[0] == 'SELECTED':
-                    action, na, evrd = fields[1:]
-                    na = eval(na)
-                    evrd = eval(evrd)
+                    action, na_evrd = fields[1:]
+                    na, evrd = eval(na_evrd)
                     if self._cache[na].in_progress is not None:
                         raise PackageInProgressConflict
                     selected[action].append((na, evrd))
                 elif fields[0] == 'REJECTED':
-                    reason, na, evrd = fields[1:4]
-                    na = eval(na)
-                    evrd = eval(evrd)
+                    reason, na_evrd = fields[1:3]
+                    na, evrd = eval(na_evrd)
                     if reason == 'reject-install-unsatisfied':
-                        subjects = fields[4:]
+                        subjects = fields[3:]
                     elif reason in {'reject-install-conflicts',
                                     'reject-install-rejected-dependency',
                                     'reject-remove-depends'}:
@@ -433,32 +431,28 @@ class UrpmiDB(mdvpkg.ConnectableObject):
     def on_task_exception(self, task_id, message):
         log.debug('task exception: %s: %s', task_id, message)
 
-    def on_download_start(self, task_id, na, evrd):
-        na = eval(na)
-        evrd = eval(evrd)
+    def on_download_start(self, task_id, na_evrd):
+        na, evrd = eval(na_evrd)
         package = self._cache[na]
         package.on_download_start(evrd)
         self.emit('download-start', task_id, package)
 
-    def on_download_progress(self, task_id, na, evrd, percent,
+    def on_download_progress(self, task_id, na_evrd, percent,
                              total, eta, speed):
-        na = eval(na)
-        evrd = eval(evrd)
+        na, evrd = eval(na_evrd)
         package = self._cache[na]
         package.on_download_progress(evrd, float(percent) / 100.0)
         self.emit('download-progress',
                   task_id, package, percent, total, eta, speed)
 
-    def on_download_end(self, task_id, na, evrd):
-        na = eval(na)
-        evrd = eval(evrd)
+    def on_download_end(self, task_id, na_evrd):
+        na, evrd = eval(na_evrd)
         package = self._cache[na]
         package.on_download_done(evrd)
         self.emit('download-end', task_id, package)
 
-    def on_download_error(self, na, evrd, message):
-        na = eval(na)
-        evrd = eval(evrd)
+    def on_download_error(self, na_evrd, message):
+        na, evrd = eval(na_evrd)
         package = self._cache[na]
         package.on_download_done(evrd)
         self.emit('download-error', task_id, package, message)
@@ -466,44 +460,38 @@ class UrpmiDB(mdvpkg.ConnectableObject):
     def on_preparing(self, task_id, total):
         self.emit('preparing', task_id, total)
 
-    def on_install_start(self, task_id, na, evrd, total, count):
-        na = eval(na)
-        evrd = eval(evrd)
+    def on_install_start(self, task_id, na_evrd, total, count):
+        na, evrd = eval(na_evrd)
         package = self._cache[na]
         package.on_install_start(evrd)
         self.emit('install-start', task_id, package, total, count)
 
-    def on_install_progress(self, task_id, na, evrd, amount, total):
-        na = eval(na)
-        evrd = eval(evrd)
+    def on_install_progress(self, task_id, na_evrd, amount, total):
+        na, evrd = eval(na_evrd)
         package = self._cache[na]
         package.on_install_progress(evrd, float(amount) / float(total))
         self.emit('install-progress', task_id, package, amount, total)
 
-    def on_install_end(self, task_id, na, evrd):
-        na = eval(na)
-        evrd = eval(evrd)
+    def on_install_end(self, task_id, na_evrd):
+        na, evrd = eval(na_evrd)
         package = self._cache[na]
         package.on_install_done(evrd)
         self.emit('package-changed')
 
-    def on_remove_start(self, task_id, na, evrd, total, count):
-        na = eval(na)
-        evrd = eval(evrd)
+    def on_remove_start(self, task_id, na_evrd, total, count):
+        na, evrd = eval(na_evrd)
         package = self._cache[na]
         package.on_remove_start(evrd)
         self.emit('remove-start', task_id, package, total, count)
 
-    def on_remove_progress(self, task_id, na, evrd, amount, total):
-        na = eval(na)
-        evrd = eval(evrd)
+    def on_remove_progress(self, task_id, na_evrd, amount, total):
+        na, evrd = eval(na_evrd)
         package = self._cache[na]
         package.on_remove_progress(evrd, float(amount) / float(total))
         self.emit('remove-progress', task_id, package, amount, total)
 
-    def on_remove_end(self, task_id, na, evrd):
-        na = eval(na)
-        evrd = eval(evrd)
+    def on_remove_end(self, task_id, na_evrd):
+        na, evrd = eval(na_evrd)
         package = self._cache[na]
         package.on_remove_done(evrd)
         self.emit('package-changed')

@@ -282,7 +282,7 @@ class DBusPackageList(PackageList, dbus.service.Object):
     @dbus.service.method(
         mdvpkg.PACKAGE_LIST_IFACE,
         in_signature='u',
-        out_signature='a(ssss)a(ssss)a((ssss)sv)a((ssss)sv)',
+        out_signature='a(ssss)a(ssss)a(s(ssss)v)a(s(ssss)v)',
         sender_keyword='sender',
         connection_keyword='connection'
     )
