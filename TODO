@@ -1,19 +1,36 @@
-=================
-mdvpkg TODO List
-=================
+-*- mode:org -*-
 
-* Decide if cached methods should emit signals or return data.
+* mdvpkg TODO list
 
-* Add support for better cache updates, implementing verification of
-  changes in entries by package versions.
+** TODO Examine if dbus methods could return data instead of return signals
 
-* Fix documentation to adhere to sphynx
+** TODO Fix download errors responses
 
-* Automate synchronization of status variables between backend and
-  tasks.py
+** TODO _set_latest_installed should set the version type directly
+   Calling _set_latest_installed should set the version to
+   'installed'.
 
-* Decide how to report back to clients the number of packages in list
-  by status -- try no to use Ready signal since it can be used by
-  different cached results, and not just packages.
+** TODO Make _list_by_type receive more then one type
+   To easy the selection of upgrades and downgrades.
 
-* Put versions list in version order (probably using OrderedDict()).
+** TODO Pass package object withing package-changed signal from urpmi
+   Use that to update filters and emit list signals.
+
+** TODO Set a cleaner way to adjust in_progress status after PA
+   Without accessing package.in_progress directly, it is also needed
+   to fix the assert to the progress callbacks.
+
+** TODO Optimize create_pkg_map
+   Put fullnames in a list and populate by removing from the list,
+   stopping as soon as there are no more names, avoiding to iterate
+   over all depslist.  Also visit db only if necessary (after
+   depslist).
+
+** TODO Implement interface to perform updates
+
+** TODO Respond correctly to changes in rpm/urpm db
+   Find a way to monitor rpmdb; use the callbacks in Package class for
+   rpmdb changes.
+
+   Use inotify to monitor urpmdb (synthesis) and reload package cache,
+   emitting relevant signals so PackageList can update itself.
