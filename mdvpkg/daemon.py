@@ -269,7 +269,7 @@ class DBusPackageList(PackageList, dbus.service.Object):
     @dbus.service.method(
         mdvpkg.PACKAGE_LIST_IFACE,
         in_signature='u',
-        out_signature='a(ssss)a(ssss)a(s(ssss)v)a(s(ssss)v)',
+        out_signature='a(ssss)a(ssss)a((ssss)sv)a((ssss)sv)',
         sender_keyword='sender',
         connection_keyword='connection'
     )
@@ -282,7 +282,7 @@ class DBusPackageList(PackageList, dbus.service.Object):
     @dbus.service.method(
         mdvpkg.PACKAGE_LIST_IFACE,
         in_signature='u',
-        out_signature='a(ssss)a(ssss)a(s(ssss)v)a(s(ssss)v)',
+        out_signature='a(ssss)a(ssss)a((ssss)sv)a((ssss)sv)',
         sender_keyword='sender',
         connection_keyword='connection'
     )
@@ -302,10 +302,10 @@ class DBusPackageList(PackageList, dbus.service.Object):
     def _convert_rej(self, rej):
         rpm2nvra = lambda rpm: rpm.nvra
         list = []
-        list.append(rej[0])
-        list.append(rpm2nvra(rej[1]))
+        list.append(rpm2nvra(rej[0]))
+        list.append(rej[1])
         # Convert subjects that are RpmPackage objects ...
-        if rej[0] in {'reject-install-conflicts',
+        if rej[1] in {'reject-install-conflicts',
                       'reject-install-rejected-dependency',
                       'reject-remove-depends'}:
             list.append(map(lambda rpm: rpm.nvra, rej[2]))

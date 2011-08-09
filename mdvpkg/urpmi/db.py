@@ -648,13 +648,13 @@ class PackageList(object):
         for reason, rejects in reject_list.iteritems():
             for reject in rejects:
                 if reason.startswith('reject-install-'):
-                    installs_rej.append((reason,
-                                         reject['rpm'],
-                                         reject['subjects']))
+                    installs_rej.append( (reject['rpm'],
+                                          reason,
+                                          reject.get('subjects', [])) )
                 else:
-                    removes_rej.append((reason,
-                                        reject['rpm'],
-                                        reject['subjects']))
+                    removes_rej.append( (reject['rpm'],
+                                         reason,
+                                         reject.get('subjects', [])) )
         installs_fn = []
         removes_fn = []
         for action, names in action_list.iteritems():
