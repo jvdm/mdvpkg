@@ -309,9 +309,12 @@ class DBusPackageList(PackageList, dbus.service.Object):
                       'reject-install-rejected-dependency',
                       'reject-remove-depends'}:
             list.append(dbus.Array(map(lambda rpm: rpm.nvra, rej[2]),
-                                   signature='a(ssss)'))
+                                   signature='(ssss)',
+                                   variant_level=1))
         else:
-            list.append(dbus.Array(rej[2], signature='as'))
+            list.append(dbus.Array(rej[2],
+                                   signature='s',
+                                   variant_level=1))
         return tuple(list)
 
     @dbus.service.method(mdvpkg.PACKAGE_LIST_IFACE,
