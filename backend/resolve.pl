@@ -129,7 +129,8 @@ MAIN: {
 		my ($whyk) = grep {
 				$_ ne 'disttag' && $_ ne 'distepoch'
 			     } keys %{ $closure->{$from} };
-		if ($whyk eq 'avoid') {
+		if ($whyk eq 'avoid'
+		    && $state->{rejected}{$from}) {
 		    response_reject(
 			'reject-install-rejected-dependency',
 			$pkg_arg,
