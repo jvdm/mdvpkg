@@ -71,7 +71,10 @@ MAIN: {
     my ($restart, $state, $to_remove);
     eval {
 	($restart, $state, $to_remove)
-	    = mdvpkg::create_state($urpm, $installs, $removes);
+	    = mdvpkg::create_state($urpm,
+				   $installs,
+				   $removes,
+				   ignore_base => 1);
     }
     or do {
 	response_error($@->{error}, @{ $@->{names} });
@@ -168,7 +171,24 @@ MAIN: {
 	}
     }
 
-    mdvpkg::compute_orphans($urpm, $state, $to_remove);
+    urpm::select::find_removed_from_basesystem(
+	$urpm,
+	URPM::DB::open(),
+	$state,
+	sub {
+	    shift;
+	    foreach (@_) {
+		response_reject('reject-remove-basesystem',
+			       $pkg_map->{$_});
+		delete $state->{rejected}{$_};
+	    }
+	}
+    );
+
+    if (urpm::select::removed_packages($urpm, $state)) {
+	mdvpkg::compute_orphans($urpm, $state, $to_remove);
+    }
+
 
     # Emit actions ...
     while (my ($id, $info) = each %{ $state->{selected} }) {

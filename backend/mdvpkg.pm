@@ -88,11 +88,12 @@ sub create_state {
 			    die {error => 'error-not-found',
 				 names => \@_};
 			},
-			callback_base => sub {
-			    shift;
-			    die {error => 'error-remove-base',
-				 names => \@_};
-		    }) or do {
+	                callback_base => sub {
+			    $options{ignore_base}
+			        or die {error => 'error-remove-base',
+					names => \@_};
+	                }
+		    ) or do {
 			die {error => 'error-nothing-to-remove',
 			     names => []}
 		    };

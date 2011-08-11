@@ -159,8 +159,6 @@ sub on_task__commit {
 	return;
     };
 
-    $to_remove = mdvpkg::compute_orphans($urpm, $state, $to_remove);
-
     # Populate pkg_map ...
     my %pkg_map = ();
     foreach my $id (keys %{ $state->{selected} || {} }) {
@@ -174,7 +172,6 @@ sub on_task__commit {
 	    }
 	}
     }
-    _add_pkg(\%pkg_map, $_) foreach (@{ $state->{orphans_to_remove} || [] });
 
     init_progress(1
 		  + keys(%{ $state->{selected} || {} }) * 2
@@ -185,6 +182,9 @@ sub on_task__commit {
     # Remove packages ...
     my $remove_count = @{ $to_remove || [] };
     if (@{ $to_remove || [] }) {
+	$to_remove = mdvpkg::compute_orphans($urpm, $state, $to_remove);
+	_add_pkg(\%pkg_map, $_)
+	    foreach (@{ $state->{orphans_to_remove} || [] });
         urpm::install::install(
             $urpm,
             $to_remove,
