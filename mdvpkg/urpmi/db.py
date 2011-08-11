@@ -292,7 +292,7 @@ class UrpmiDB(mdvpkg.ConnectableObject):
                                     'reject-install-rejected-dependency',
                                     'reject-remove-depends'}:
                         subjects = []
-                        for na_s, evrd_s in [eval(pt) for pt in fields[4:]]:
+                        for na_s, evrd_s in [eval(pt) for pt in fields[3:]]:
                             subjects.append(self._cache[na_s][evrd_s])
                     else:
                         subjects = None
