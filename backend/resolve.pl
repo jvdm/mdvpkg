@@ -177,6 +177,8 @@ MAIN: {
 	$state,
 	sub {
 	    shift;
+	    # 1 is returned when there is no rejected package:
+	    $_[0] != 1 or return;
 	    foreach (@_) {
 		response_reject('reject-remove-basesystem',
 			       $pkg_map->{$_});
