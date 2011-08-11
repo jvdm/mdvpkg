@@ -231,8 +231,10 @@ sub create_pkg_map {
 
     while (my ($fn, $rej) = each %{ $state->{rejected} }) {
 	$add_fullname->($fn);
-	foreach (@{ $rej->{backtrack}{conflicts} || []},
-		 @{ $rej->{backtrack}{keep} || []},
+	foreach ($rej->{backtrack}
+		     ? (@{ $rej->{backtrack}{conflicts} || [] },
+			@{ $rej->{backtrack}{keep} || [] })
+		     : [],
 		 keys %{ $rej->{closure} || {} })
 	{
 	    $add_fullname->($_)
