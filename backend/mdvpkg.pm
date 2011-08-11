@@ -25,6 +25,8 @@ package mdvpkg;
 
 use urpm::select qw();
 use urpm::orphans qw();
+use urpm::select qw();
+use urpm::util qw();
 use URPM;
 
 
@@ -209,8 +211,8 @@ sub create_pkg_map {
 
     my $set_fullname = sub {
 	my $pkg = shift;
-	my $pkg_arg = create_pkg_arg($pkg);
 	if (exists $fullnames{$pkg->fullname}) {
+	    my $pkg_arg = create_pkg_arg($pkg);
 	    $fullnames{$pkg->fullname} = $pkg_arg;
 	    my $nvra = sprintf("%s-%s-%s.%s",
 			       $pkg->name,
@@ -221,8 +223,8 @@ sub create_pkg_map {
 		$fullnames{$nvra} = $pkg_arg;
 	    }
 	    delete $fullnames_mark{$pkg->fullname};
-	    return scalar %fullnames_mark;
 	}
+	return scalar %fullnames_mark;
     };
 
     # Populate the fullname hash with undef values ...
