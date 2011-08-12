@@ -335,7 +335,7 @@ class DBusPackageList(PackageList, dbus.service.Object):
     def ProcessActions(self, sender, connection):
 	check_authorization(sender,
                             connection,
-                            ping 'org.mandrivalinux.mdvpkg.auth_admin_keep')
+                            'org.mandrivalinux.mdvpkg.auth_admin_keep')
         try:
             return self.process_actions()
         except ValueError:
