@@ -187,10 +187,6 @@ MAIN: {
 	}
     );
 
-    if (urpm::select::removed_packages($urpm, $state)) {
-	mdvpkg::compute_orphans($urpm, $state, $to_remove);
-    }
-
 
     # Emit actions ...
     while (my ($id, $info) = each %{ $state->{selected} }) {
@@ -205,9 +201,6 @@ MAIN: {
 	response_action($action, $pkg);
     }
 
-    foreach (@{ $state->{orphans_to_remove} }) {
-	response_action('action-auto-remove', $_);
-    }
 
     foreach (grep {
 	         $state->{rejected}{$_}{removed}

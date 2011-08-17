@@ -33,7 +33,6 @@ use urpm::args qw();
 use urpm::select qw();
 use urpm::main_loop qw();
 use urpm::install qw();
-use urpm::orphans qw();
 
 use File::Basename qw(fileparse);
 
@@ -182,9 +181,6 @@ sub on_task__commit {
     # Remove packages ...
     my $remove_count = @{ $to_remove || [] };
     if (@{ $to_remove || [] }) {
-	$to_remove = mdvpkg::compute_orphans($urpm, $state, $to_remove);
-	_add_pkg(\%pkg_map, $_)
-	    foreach (@{ $state->{orphans_to_remove} || [] });
         urpm::install::install(
             $urpm,
             $to_remove,
