@@ -87,8 +87,7 @@ def parse_configuration(conf_path):
                           'definition: %s' % name
                     raise ValueError, msg
                 temp_block = {'name': name}
-                if url:
-                    temp_block['url'] = url
+                temp_block['url'] = url
             elif line == '{':
                 if global_block is not None:
                     # found two global blocks:
